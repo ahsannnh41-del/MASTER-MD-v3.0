@@ -63,6 +63,21 @@ let globalActiveSock = null;
 let currentConnectedPhone = null;
 let isManualUnlink = false;
 
+// ─── Normalizer for Phone Numbers ──────────────────────────────────────────
+export function normalizePhoneNumber(raw) {
+    let n = String(raw || '').replace(/[^0-9]/g, '');
+    if (n.startsWith('00')) n = n.slice(2);
+    // Pakistani local 03xx format: 03107260507 (11 digits) -> 923107260507
+    if (n.startsWith('03') && n.length === 11) {
+        n = '92' + n.slice(1);
+    } else if (n.startsWith('0') && n.length === 11) {
+        n = '92' + n.slice(1);
+    } else if (n.startsWith('3') && n.length === 10) {
+        n = '92' + n;
+    }
+    return n;
+}
+
 // Ensure persistent session directory
 const SESSION_DIR = path.join(__dirname, 'session');
 if (!fs.existsSync(SESSION_DIR)) {
@@ -109,6 +124,7 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
             globalActiveSock.ev.removeAllListeners();
             globalActiveSock.end();
         } catch {}
+        globalActiveSock = null;
     }
 
     const pinoLog = pino({ level: 'silent' });
@@ -124,7 +140,7 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
         },
         msgRetryCounterCache,
         printQRInTerminal: false,
-        browser: Browsers.ubuntu('Chrome'),
+        browser: Browsers.macOS('Desktop'),
         markOnlineOnConnect: true,
         syncFullHistory: false,
         shouldSyncHistoryMessage: () => false,
@@ -215,12 +231,15 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
         } else if (connection === 'close') {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             const isLoggedOut = statusCode === DisconnectReason?.loggedOut || statusCode === 401 || statusCode === 403;
+            const isRestart = statusCode === DisconnectReason?.restartRequired || statusCode === 515;
 
-            // Auto-reconnect for 515 (restartRequired) unless manually unlinked or credentials deleted
+            console.log(`[MASTER MD] Socket connection closed (Code: ${statusCode || 'unknown'}).`);
+
+            // Always reconnect on 515 (restartRequired) or if valid credentials exist, unless explicitly logged out or manually unlinked
             const credsExist = fs.existsSync(path.join(customDir, 'creds.json'));
-            if (!isLoggedOut && !isManualUnlink && state.creds.registered && credsExist) {
-                console.log(`[MASTER MD] Reconnecting socket (Code: ${statusCode})...`);
-                setTimeout(() => launchMasterBot(customDir, rawNumber), 2000);
+            if (!isLoggedOut && !isManualUnlink && (isRestart || credsExist)) {
+                console.log(`[MASTER MD] Reconnecting socket to finalize session (Status: ${statusCode || 515})...`);
+                setTimeout(() => launchMasterBot(customDir, rawNumber), 3000);
             }
         }
     });
@@ -233,18 +252,28 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
 }
 
 // ─── Auto-Start Existing Saved Session On Launch ────────────────────────────
-if (fs.existsSync(path.join(SESSION_DIR, 'creds.json'))) {
-    console.log('📂 Found existing credentials in ./session! Auto-starting MASTER MD...');
-    launchMasterBot(SESSION_DIR, '').catch(err => {
-        console.error('Failed to auto-start session:', err.message);
-    });
+try {
+    const credsPath = path.join(SESSION_DIR, 'creds.json');
+    if (fs.existsSync(credsPath)) {
+        const credsData = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
+        if (credsData && credsData.registered) {
+            console.log('📂 Found registered credentials in ./session! Auto-starting MASTER MD...');
+            launchMasterBot(SESSION_DIR, '').catch(err => {
+                console.error('Failed to auto-start session:', err.message);
+            });
+        } else {
+            console.log('ℹ️ Session credentials in ./session are unlinked/unregistered. Waiting for fresh pairing.');
+        }
+    }
+} catch (e) {
+    console.warn('Session startup check warning:', e.message);
 }
 
 // ─── API Routes for Web Pairing ─────────────────────────────────────────────
 app.post('/api/pair', async (req, res) => {
     try {
         const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-        let rawNumber = String(body.phoneNumber || '').replace(/[^0-9]/g, '');
+        let rawNumber = normalizePhoneNumber(body.phoneNumber);
 
         if (!rawNumber || rawNumber.length < 10 || rawNumber.length > 15) {
             return res.status(400).json({
@@ -256,64 +285,111 @@ app.post('/api/pair', async (req, res) => {
         const sessionId = crypto.randomBytes(6).toString('hex');
         sessions.set(sessionId, { status: 'initializing', phoneNumber: rawNumber });
 
-        // ── Respond IMMEDIATELY — don't block on WhatsApp handshake ──────────
-        // Render has a 30s proxy timeout; pairing takes 10-20s so we must
-        // return the sessionId now and let the client poll /api/status.
-        res.status(200).json({
-            success: true,
-            sessionId,
-            code: null,
-            message: 'Pairing started. Poll /api/status for your code.'
-        });
+        // Clean stale unauthenticated session before fresh pairing to avoid Connection Closed
+        let isRegistered = false;
+        try {
+            const credsPath = path.join(SESSION_DIR, 'creds.json');
+            if (fs.existsSync(credsPath)) {
+                const credsData = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
+                isRegistered = !!credsData.registered;
+            }
+        } catch {}
 
-        // ── Run pairing in background (non-blocking) ─────────────────────────
-        (async () => {
+        if (!isRegistered) {
             try {
-                let activeSock = null;
-
-                await launchMasterBot(SESSION_DIR, rawNumber, (sock) => {
-                    activeSock = sock;
-                    sessions.set(sessionId, { status: 'handshaking', sock, phoneNumber: rawNumber });
-
-                    sock.ev.on('connection.update', (update) => {
-                        if (update.connection === 'connecting' || update.isNewLogin) {
-                            sessions.set(sessionId, { status: 'logging_in', sock, phoneNumber: rawNumber });
+                if (fs.existsSync(SESSION_DIR)) {
+                    const files = fs.readdirSync(SESSION_DIR);
+                    for (const f of files) {
+                        if (f !== 'pairing_history.json') {
+                            fs.rmSync(path.join(SESSION_DIR, f), { recursive: true, force: true });
                         }
-                        if (update.connection === 'open') {
-                            sessions.set(sessionId, { status: 'connected', sock, phoneNumber: rawNumber });
-                        }
-                    });
-                });
-
-                await delay(4500);
-
-                let pairingCode = null;
-                for (let attempt = 1; attempt <= 3; attempt++) {
-                    try {
-                        pairingCode = await activeSock.requestPairingCode(rawNumber);
-                        if (pairingCode) break;
-                    } catch (err) {
-                        console.warn(`Pairing code attempt ${attempt} failed:`, err.message);
-                        if (attempt === 3) throw err;
-                        await delay(2000);
                     }
                 }
-
-                sessions.set(sessionId, {
-                    status: 'waiting_for_user',
-                    code: pairingCode,
-                    sock: activeSock,
-                    phoneNumber: rawNumber
-                });
-
-                logPairingAttempt(rawNumber, 'Web Portal', pairingCode);
-                console.log(`✅ Pairing code ready for ${rawNumber}: ${pairingCode}`);
-
-            } catch (bgErr) {
-                console.error('Background pairing error:', bgErr.message);
-                sessions.set(sessionId, { status: 'error', error: bgErr.message, phoneNumber: rawNumber });
+            } catch (e) {
+                console.warn('Clean session warning:', e.message);
             }
-        })();
+        }
+
+        let activeSock = null;
+
+        await launchMasterBot(SESSION_DIR, rawNumber, (sock) => {
+            activeSock = sock;
+            sessions.set(sessionId, { status: 'handshaking', sock, phoneNumber: rawNumber });
+
+            sock.ev.on('connection.update', (update) => {
+                if (update.connection === 'connecting' || update.isNewLogin) {
+                    sessions.set(sessionId, { status: 'logging_in', sock, phoneNumber: rawNumber });
+                }
+                if (update.connection === 'open') {
+                    sessions.set(sessionId, { status: 'connected', sock, phoneNumber: rawNumber });
+                }
+            });
+        });
+
+        // Robust Handshake Wait: wait until socket emits qr (stream ready) or open
+        let isHandshakeReady = false;
+        let handshakeError = null;
+
+        const readyPromise = new Promise((resolve, reject) => {
+            const timer = setTimeout(() => resolve(), 9000);
+            const listener = (update) => {
+                if (update.qr || update.connection === 'open') {
+                    isHandshakeReady = true;
+                    clearTimeout(timer);
+                    resolve();
+                }
+                if (update.connection === 'close') {
+                    const code = update.lastDisconnect?.error?.output?.statusCode;
+                    if (code !== 515) {
+                        handshakeError = update.lastDisconnect?.error?.message || 'Connection closed by WhatsApp';
+                        clearTimeout(timer);
+                        reject(new Error(handshakeError));
+                    }
+                }
+            };
+            activeSock.ev.on('connection.update', listener);
+        });
+
+        await readyPromise.catch(err => {
+            console.warn('[Handshake wait warning]:', err.message);
+        });
+
+        if (handshakeError) {
+            throw new Error(`WhatsApp Handshake Error: ${handshakeError}`);
+        }
+
+        await delay(1500);
+
+        let pairingCode = null;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+                if (!activeSock) break;
+                pairingCode = await activeSock.requestPairingCode(rawNumber);
+                if (pairingCode) break;
+            } catch (err) {
+                console.warn(`Pairing code attempt ${attempt} warning:`, err.message);
+                if (attempt === 3) throw err;
+                await delay(2000);
+            }
+        }
+
+        const rawCode = String(pairingCode || '').trim();
+        sessions.set(sessionId, {
+            status: 'waiting_for_user',
+            code: rawCode,
+            sock: activeSock,
+            phoneNumber: rawNumber
+        });
+
+        logPairingAttempt(rawNumber, 'Web Portal', rawCode);
+        console.log(`✅ Pairing code ready for ${rawNumber}: ${rawCode}`);
+
+        return res.status(200).json({
+            success: true,
+            sessionId,
+            code: rawCode,
+            message: 'Pairing code generated successfully.'
+        });
 
     } catch (error) {
         console.error('Pairing route error:', error);

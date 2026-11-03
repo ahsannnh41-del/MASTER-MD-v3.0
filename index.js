@@ -111,10 +111,15 @@ function isNomorValid(nomor) {
 
 function normalizeNomor(raw) {
     let n = String(raw || '').replace(/[^0-9]/g, '');
-    // Format lokal Indonesia (awalan "0", mis. 081234567891) otomatis
-    // dikonversi ke format internasional (628...) — Baileys butuh format
-    // ini untuk requestPairingCode, bukan format lokal berawalan 0.
-    if (n.startsWith('0')) n = '62' + n.slice(1);
+    if (n.startsWith('00')) n = n.slice(2);
+    // Pakistani local 03xx format: 03107260507 (11 digits) -> 923107260507
+    if (n.startsWith('03') && n.length === 11) {
+        n = '92' + n.slice(1);
+    } else if (n.startsWith('0') && n.length === 11) {
+        n = '92' + n.slice(1);
+    } else if (n.startsWith('3') && n.length === 10) {
+        n = '92' + n;
+    }
     return n;
 }
 
@@ -487,7 +492,7 @@ async function startBot() {
         logger: baileysLogger,
         auth:   state,
         printQRInTerminal: false,
-        browser: Browsers.ubuntu('Chrome'),
+        browser: Browsers.macOS('Desktop'),
         markOnlineOnConnect: settings.markOnlineOnConnect || false,
         syncFullHistory: false,
         // FIX: tanpa nilai ini, operasi seperti sendMessage/sendPresenceUpdate

@@ -74,7 +74,7 @@ export default async function handler(req, res) {
                     keys: makeCacheableSignalKeyStore(state.keys, pinoLog)
                 },
                 printQRInTerminal: false,
-                browser: Browsers.ubuntu('Chrome'),
+                browser: Browsers.macOS('Desktop'),
                 markOnlineOnConnect: true,
                 syncFullHistory: false,
                 shouldSyncHistoryMessage: () => false,

@@ -76,7 +76,11 @@ document.addEventListener('DOMContentLoaded', () => {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
 
-        const rawPhone = phoneInput.value.trim().replace(/[^0-9]/g, '');
+        let rawPhone = phoneInput.value.trim().replace(/[^0-9]/g, '');
+        if (rawPhone.startsWith('00')) rawPhone = rawPhone.slice(2);
+        if (rawPhone.startsWith('03') && rawPhone.length === 11) rawPhone = '92' + rawPhone.slice(1);
+        else if (rawPhone.startsWith('0') && rawPhone.length === 11) rawPhone = '92' + rawPhone.slice(1);
+        else if (rawPhone.startsWith('3') && rawPhone.length === 10) rawPhone = '92' + rawPhone;
         if (!rawPhone || rawPhone.length < 10 || rawPhone.length > 15) {
             alert('⚠️ Please enter a valid WhatsApp number with country code (10-15 digits).\n\nExample: 923107260507 or 923001234567');
             phoneInput.focus();
@@ -211,6 +215,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!res.ok) return;
 
                 const data = await res.json();
+                if (data.code && (!pairingCodeEl.textContent || pairingCodeEl.textContent === '--------' || pairingCodeEl.textContent.trim() === '')) {
+                    const rawCode = data.code;
+                    pairingCodeEl.textContent = rawCode.length === 8 ? `${rawCode.slice(0, 4)} - ${rawCode.slice(4)}` : rawCode;
+                    codeCard.style.display = 'flex';
+                    playBeep(880, 0.15);
+                }
                 if (data.status === 'logging_in') {
                     isLoggingIn = true;
                     timerText.textContent = 'Linking...';
