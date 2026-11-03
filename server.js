@@ -52,8 +52,9 @@ if (fs.existsSync(path.join(__dirname, 'web-pairing'))) {
     app.use(express.static(path.join(__dirname, 'web-pairing')));
 }
 
-// In-Memory Session Tracker
+// In-Memory Session & Message Store for E2EE Retry Decryption
 const sessions = new Map();
+const messageStore = new Map();
 let globalActiveSock = null;
 
 // Ensure persistent session directory
@@ -75,6 +76,13 @@ function attachFullBotPipeline(sock, rawNumber) {
             try {
                 if (!msg.message) continue;
                 if (msg.key?.remoteJid === 'status@broadcast') continue;
+                if (msg.key?.id) {
+                    messageStore.set(msg.key.id, msg);
+                    if (messageStore.size > 2000) {
+                        const oldest = messageStore.keys().next().value;
+                        messageStore.delete(oldest);
+                    }
+                }
 
                 console.log(`[MASTER MD] 📩 Message received (${type}) from: ${msg.key?.remoteJid} (fromMe: ${msg.key?.fromMe})`);
                 // Execute through the real MASTER MD pipeline (all 2000+ commands, admin, protection, media, RPG)
@@ -104,10 +112,7 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
     const sock = makeWASocket({
         version,
         logger: pinoLog,
-        auth: {
-            creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, pinoLog)
-        },
+        auth: state,
         printQRInTerminal: false,
         browser: Browsers.ubuntu('Chrome'),
         markOnlineOnConnect: true,
@@ -117,6 +122,10 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
         connectTimeoutMs: 60_000,
         defaultQueryTimeoutMs: 60_000,
         keepAliveIntervalMs: 10_000,
+        getMessage: async (key) => {
+            const m = messageStore.get(key.id);
+            return m?.message || m || { conversation: 'MASTER MD' };
+        },
     });
 
     sock.ev.on('creds.update', async () => {
@@ -207,7 +216,7 @@ app.post('/api/pair', async (req, res) => {
         }
 
         const sessionId = crypto.randomBytes(6).toString('hex');
-        const sessionPathDir = path.join(os.tmpdir(), `master_md_${sessionId}`);
+        const sessionPathDir = SESSION_DIR;
 
         sessions.set(sessionId, { status: 'initializing', phoneNumber: rawNumber });
 

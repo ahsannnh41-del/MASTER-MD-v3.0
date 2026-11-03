@@ -152,7 +152,11 @@ async function replyWithThumb(sock, jid, text, quotedMsg) {
         return await withTimeout(sock.sendMessage(target || jid, { text }, { quoted: quotedMsg }), 30_000, 'sendMessage(plainText)');
     } catch (err) {
         log.error(`GAGAL kirim pesan ke ${target || jid}: ${err.message}`);
-        throw err;
+        try {
+            return await sock.sendMessage(target || jid, { text });
+        } catch (e2) {
+            throw err;
+        }
     }
 }
 
