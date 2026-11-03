@@ -342,6 +342,12 @@ app.post('/api/pair', async (req, res) => {
         const sessionId = crypto.randomBytes(6).toString('hex');
         sessions.set(sessionId, { status: 'initializing', phoneNumber: rawNumber });
 
+        // Cancel any pending reconnect timers
+        if (botReconnectTimer) {
+            clearTimeout(botReconnectTimer);
+            botReconnectTimer = null;
+        }
+
         // Clean stale unauthenticated session before fresh pairing to avoid Connection Closed
         let isRegistered = false;
         try {
@@ -360,7 +366,7 @@ app.post('/api/pair', async (req, res) => {
                     globalActiveSock.end();
                 } catch {}
                 globalActiveSock = null;
-                await delay(300);
+                await delay(200);
             }
 
             try {
@@ -401,20 +407,19 @@ app.post('/api/pair', async (req, res) => {
         });
 
         // Fast & resilient pairing code request:
-        // Give socket 2.5 seconds to establish initial connection
-        await delay(2500);
-
+        // Wait until WebSocket is in readyState 1 (OPEN), checking every 500ms
         let pairingCode = null;
-        for (let attempt = 1; attempt <= 4; attempt++) {
-            try {
-                if (activeSock && typeof activeSock.requestPairingCode === 'function') {
-                    pairingCode = await activeSock.requestPairingCode(rawNumber);
+        for (let attempt = 1; attempt <= 6; attempt++) {
+            const currentSock = globalActiveSock || activeSock;
+            if (currentSock?.ws?.readyState === 1) {
+                try {
+                    pairingCode = await currentSock.requestPairingCode(rawNumber);
                     if (pairingCode) break;
+                } catch (err) {
+                    console.warn(`[Pairing attempt ${attempt} warning]:`, err.message);
                 }
-            } catch (err) {
-                console.warn(`[Pairing attempt ${attempt} warning]:`, err.message);
             }
-            if (attempt < 4) await delay(1500);
+            await delay(800);
         }
 
         const rawCode = pairingCode ? String(pairingCode).trim() : null;
@@ -424,7 +429,7 @@ app.post('/api/pair', async (req, res) => {
             status: rawCode ? 'waiting_for_user' : 'handshaking',
             code: rawCode,
             qr: lastQrString,
-            sock: activeSock,
+            sock: globalActiveSock || activeSock,
             phoneNumber: rawNumber
         });
 
@@ -432,13 +437,14 @@ app.post('/api/pair', async (req, res) => {
             logPairingAttempt(rawNumber, 'Web Portal', rawCode);
             console.log(`✅ Pairing code ready for ${rawNumber}: ${rawCode}`);
         } else {
-            console.log(`⏳ Socket initialized for ${rawNumber}, generating code in background...`);
+            console.log(`⏳ Socket handshaking for ${rawNumber}, generating code in background...`);
             (async () => {
-                for (let bg = 1; bg <= 6; bg++) {
-                    await delay(2000);
-                    try {
-                        if (activeSock && typeof activeSock.requestPairingCode === 'function') {
-                            const code = await activeSock.requestPairingCode(rawNumber);
+                for (let bg = 1; bg <= 8; bg++) {
+                    await delay(1200);
+                    const currentSock = globalActiveSock || activeSock;
+                    if (currentSock?.ws?.readyState === 1) {
+                        try {
+                            const code = await currentSock.requestPairingCode(rawNumber);
                             if (code) {
                                 const latest = sessions.get(sessionId) || {};
                                 sessions.set(sessionId, {
@@ -451,8 +457,10 @@ app.post('/api/pair', async (req, res) => {
                                 console.log(`✅ [Background] Pairing code ready for ${rawNumber}: ${code}`);
                                 break;
                             }
+                        } catch (e) {
+                            console.warn(`[Background pairing attempt ${bg}]:`, e.message);
                         }
-                    } catch {}
+                    }
                 }
             })();
         }
