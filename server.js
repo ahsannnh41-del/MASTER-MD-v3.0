@@ -382,3 +382,22 @@ app.listen(PORT, '0.0.0.0', () => {
         console.warn('[TelegramPairing] Startup note:', tgErr.message);
     }
 });
+
+// Auto-heal corrupted Signal ratchet sessions to prevent "Waiting for this message" loop
+process.on('unhandledRejection', (err) => {
+    const errStr = String(err?.message || err?.stack || err || '');
+    if (errStr.includes('Bad MAC') || errStr.includes('Failed to decrypt')) {
+        console.warn('⚠️ [SessionHealer] Signal ratchet desync detected. Cleaning stale session cache...');
+        try {
+            if (fs.existsSync(SESSION_DIR)) {
+                const files = fs.readdirSync(SESSION_DIR);
+                for (const f of files) {
+                    if (f.startsWith('session-') && f.endsWith('.json')) {
+                        try { fs.unlinkSync(path.join(SESSION_DIR, f)); } catch {}
+                    }
+                }
+                console.log('✅ [SessionHealer] Stale session files reset. Key renegotiation triggered!');
+            }
+        } catch {}
+    }
+});

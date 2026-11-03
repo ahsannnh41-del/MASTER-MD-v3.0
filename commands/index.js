@@ -4086,8 +4086,23 @@ _"Complete directory of 2,000+ high-performance commands."_
 
     sections.push(`\n— ✦☆✦ — *${sc('ROLES & PERMISSIONS')}*\n🌟 = CREATOR  |  Ⓞ = OWNER  |  Ⓐ = ADMIN  |  Ⓟ = PREMIUM\n_No symbol = Public command (free for all members)_\n\n💡 Type *${prefix}menu* for the compact interactive dashboard.\n👑 *© 2026 MASTER MD • All Rights Reserved to AHSAN (03107260507)*`);
 
-    const directoryText = safeReplyText(sections.join('\n\n'));
-    await ctx.sock.sendMessage(ctx.jid, { text: directoryText }, { quoted: ctx.msg });
+    // Chunk output into safe, lightweight packets to avoid Signal decryption overload
+    const MAX_CHUNK = 6000;
+    let buffer = '';
+    for (const sec of sections) {
+        if ((buffer.length + sec.length) > MAX_CHUNK) {
+            if (buffer.trim()) {
+                await ctx.sock.sendMessage(ctx.jid, { text: buffer.trim() }, { quoted: ctx.msg });
+                await new Promise(r => setTimeout(r, 350));
+            }
+            buffer = sec;
+        } else {
+            buffer += (buffer ? '\n\n' : '') + sec;
+        }
+    }
+    if (buffer.trim()) {
+        await ctx.sock.sendMessage(ctx.jid, { text: buffer.trim() }, { quoted: ctx.msg });
+    }
 });
 
 
