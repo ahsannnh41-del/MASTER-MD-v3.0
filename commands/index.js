@@ -4092,7 +4092,7 @@ _"Complete directory of 2,000+ high-performance commands."_
     for (const sec of sections) {
         if ((buffer.length + sec.length) > MAX_CHUNK) {
             if (buffer.trim()) {
-                await ctx.sock.sendMessage(ctx.jid, { text: buffer.trim() }, { quoted: ctx.msg });
+                await ctx.sock.sendMessage(ctx.jid, { text: buffer.trim() });
                 await new Promise(r => setTimeout(r, 350));
             }
             buffer = sec;
@@ -4101,7 +4101,7 @@ _"Complete directory of 2,000+ high-performance commands."_
         }
     }
     if (buffer.trim()) {
-        await ctx.sock.sendMessage(ctx.jid, { text: buffer.trim() }, { quoted: ctx.msg });
+        await ctx.sock.sendMessage(ctx.jid, { text: buffer.trim() });
     }
 });
 

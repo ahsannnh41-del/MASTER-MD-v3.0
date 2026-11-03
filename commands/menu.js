@@ -718,18 +718,122 @@ ${sc('Fast')} • ${sc('Stable')} • ${sc('Secure')}
 
     if (sock && jid) {
         try {
-            const imageContent = getThumbnailImageContent();
-            await withTimeout(
-                sock.sendMessage(jid, {
-                    ...imageContent,
-                    caption: menuText
-                }, { quoted: msg }),
-                20_000,
-                'sendMessage(menuImage)'
-            );
+            const { generateWAMessageFromContent, prepareWAMessageMedia } = await import('@whiskeysockets/baileys');
+
+            if (jid.endsWith('@g.us')) {
+                try {
+                    await withTimeout(getGroupMetadata(sock, jid), 15_000, 'getGroupMetadata(menu)');
+                } catch (metaErr) {
+                    log?.warn?.(`[menu] Group metadata refresh warning: ${metaErr.message}`);
+                }
+            }
+
+            let headerImageMessage = null;
+            try {
+                const media = await withTimeout(
+                    prepareWAMessageMedia(
+                        getThumbnailImageContent(),
+                        { upload: sock.waUploadToServer }
+                    ),
+                    30_000,
+                    'prepareWAMessageMedia(menuThumbnail)'
+                );
+                headerImageMessage = media.imageMessage;
+            } catch (thumbErr) {
+                log?.warn?.(`[menu] Header thumbnail warning: ${thumbErr.message}`);
+            }
+
+            const rows = [
+                { title: '🤖 All Commands',     description: 'View all 2000+ commands directory', id: `${P}allmenu`     },
+                { title: '👑 Owner Info',        description: 'Developer contact & channel',       id: `${P}owner`       },
+                { title: '⚡ Latency Ping',      description: 'Check bot server response speed',   id: `${P}ping`        },
+                { title: '📢 Official Channel',  description: 'Updates & news channel',            id: `${P}credits`     },
+                { title: '🛡️ Admin Menu',        description: 'Group moderation & security tools', id: `${P}menuadmin`   },
+                { title: '🧠 AI Supercharged',    description: 'Smart AI assistant & prompts',      id: `${P}ai`          },
+                { title: '📥 Downloader Menu',    description: 'TikTok, Instagram, YouTube & more', id: `${P}menumedia`   },
+                { title: '🛠️ Tools Menu',        description: 'Converters & utility tools',        id: `${P}menutools`   },
+                { title: '🎮 Fun & Games',       description: 'Games, memes & trivia',             id: `${P}menufun`     },
+                { title: '⚔️ RPG System',        description: 'Guilds, inventory & adventures',    id: `${P}menurpg`     },
+                { title: '🤖 Bot Settings',      description: 'Bot configuration & options',       id: `${P}menubot`     },
+            ];
+
+            const waMsg = generateWAMessageFromContent(jid, {
+                buttonsMessage: {
+                    contentText: `${menuText}\n\n👇 *Select an option below or tap buttons:*`,
+                    footerText: `© ${BOT} • Developed by AHSAN`,
+                    ...(headerImageMessage
+                        ? { headerType: 4, imageMessage: headerImageMessage }
+                        : { headerType: 1 }),
+                    viewOnce: true,
+                    buttons: [
+                        {
+                            buttonId: `${P}allmenu`,
+                            buttonText: { displayText: '🤖 All Commands' },
+                            type: 1,
+                        },
+                        {
+                            buttonId: 'channel_cta',
+                            buttonText: { displayText: '📢 Official Channel' },
+                            type: 1,
+                            nativeFlowInfo: {
+                                name: 'cta_url',
+                                paramsJson: JSON.stringify({
+                                    display_text: '📢 Official Channel',
+                                    url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46',
+                                    merchant_url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46',
+                                }),
+                            },
+                        },
+                        {
+                            buttonId: 'menu_list',
+                            buttonText: { displayText: '☰ Menu Categories' },
+                            type: 1,
+                            nativeFlowInfo: {
+                                name: 'single_select',
+                                paramsJson: JSON.stringify({
+                                    title: `${BOT} Command Suites`,
+                                    sections: [
+                                        { title: 'Core Navigation', rows: rows.slice(0, 4) },
+                                        { title: 'Features & Tools', rows: rows.slice(4, 8) },
+                                        { title: 'Games & RPG', rows: rows.slice(8, 11) },
+                                    ]
+                                })
+                            }
+                        }
+                    ]
+                }
+            }, { quoted: msg, userJid: sock.user?.jid });
+
+            await sock.relayMessage(jid, waMsg.message, {
+                messageId: waMsg.key.id,
+                additionalNodes: [{
+                    tag: 'biz',
+                    attrs: {},
+                    content: [{
+                        tag: 'interactive',
+                        attrs: { type: 'native_flow', v: '1' },
+                        content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }]
+                    }]
+                }],
+            });
             return;
         } catch (err) {
-            log?.warn?.(`[menu] Image send failed: ${err.message} — sending plain text`);
+            log?.warn?.(`[menu] Interactive buttons relay fallback: ${err.message}`);
+            // Fallback to sending native image message if client rejected buttons
+            try {
+                const imageContent = getThumbnailImageContent();
+                await withTimeout(
+                    sock.sendMessage(jid, {
+                        ...imageContent,
+                        caption: menuText
+                    }, { quoted: msg }),
+                    20_000,
+                    'sendMessage(menuImage)'
+                );
+                return;
+            } catch (err2) {
+                log?.warn?.(`[menu] Fallback image error: ${err2.message}`);
+            }
         }
     }
 

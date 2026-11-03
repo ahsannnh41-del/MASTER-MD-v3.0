@@ -10,6 +10,7 @@ import os from 'os';
 import pino from 'pino';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import { NodeCache } from '@cacheable/node-cache';
 import baileysPkg, {
     useMultiFileAuthState,
     fetchLatestBaileysVersion,
@@ -22,7 +23,7 @@ import baileysPkg, {
 // Import full bot core pipeline and commands
 import { processIncomingMessage } from './lib/messagePipeline.js';
 import { startTelegramPairingBot } from './lib/telegramPairing.js';
-import { logPairingAttempt, markPairingConnected, getPairingHistory } from './lib/pairingTracker.js';
+import { logPairingAttempt, markPairingConnected, getPairingHistory, unlinkPairing, deletePairingRecord } from './lib/pairingTracker.js';
 import settings from './setting.js';
 import { verifyIntegrity } from './lib/integrity.js';
 
@@ -57,7 +58,10 @@ if (fs.existsSync(path.join(__dirname, 'web-pairing'))) {
 // In-Memory Session & Message Store for E2EE Retry Decryption
 const sessions = new Map();
 const messageStore = new Map();
+const msgRetryCounterCache = new NodeCache({ stdTTL: 5 * 60, useClones: false });
 let globalActiveSock = null;
+let currentConnectedPhone = null;
+let isManualUnlink = false;
 
 // Ensure persistent session directory
 const SESSION_DIR = path.join(__dirname, 'session');
@@ -118,6 +122,7 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, pinoLog)
         },
+        msgRetryCounterCache,
         printQRInTerminal: false,
         browser: Browsers.ubuntu('Chrome'),
         markOnlineOnConnect: true,
@@ -131,7 +136,7 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
             const m = messageStore.get(key.id);
             if (m?.message) return m.message;
             if (m) return m;
-            return undefined;
+            return { conversation: '⚡ MASTER MD Active' };
         },
     });
 
@@ -180,8 +185,13 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
             console.log('⚡ Features  : 2000+ Commands Active');
             console.log('═'.repeat(60) + '\n');
 
+            const activePhone = rawNumber || (sock.user?.id ? sock.user.id.split(':')[0].split('@')[0].replace(/[^0-9]/g, '') : '');
+            if (activePhone) {
+                currentConnectedPhone = activePhone;
+                markPairingConnected(activePhone);
+            }
+
             if (rawNumber) {
-                markPairingConnected(rawNumber);
                 try {
                     const targetJid = `${rawNumber}@s.whatsapp.net`;
                     await sock.sendMessage(targetJid, {
@@ -206,8 +216,9 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             const isLoggedOut = statusCode === DisconnectReason?.loggedOut || statusCode === 401 || statusCode === 403;
 
-            // Auto-reconnect for 515 (restartRequired)
-            if (!isLoggedOut && state.creds.registered) {
+            // Auto-reconnect for 515 (restartRequired) unless manually unlinked or credentials deleted
+            const credsExist = fs.existsSync(path.join(customDir, 'creds.json'));
+            if (!isLoggedOut && !isManualUnlink && state.creds.registered && credsExist) {
                 console.log(`[MASTER MD] Reconnecting socket (Code: ${statusCode})...`);
                 setTimeout(() => launchMasterBot(customDir, rawNumber), 2000);
             }
@@ -344,9 +355,77 @@ app.get('/admin', (req, res) => {
     if (fs.existsSync(path.join(__dirname, 'admin.html'))) {
         return res.sendFile(path.join(__dirname, 'admin.html'));
     }
+    if (fs.existsSync(path.join(__dirname, 'public', 'admin.html'))) {
+        return res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+    }
     res.status(404).send('Admin Panel not found');
 });
 
+// ─── Unlink User Session & Wipe Authentication ──────────────────────────────
+export async function unlinkUserSession(phoneToUnlink) {
+    const cleanTarget = String(phoneToUnlink || '').replace(/[^0-9]/g, '');
+    console.log(`\n🛑 [Admin Unlink] Terminating bot session for +${cleanTarget || 'active user'}...`);
+    isManualUnlink = true;
+
+    // 1. Terminate & logout active Baileys socket
+    if (globalActiveSock) {
+        try {
+            console.log(`[Admin Unlink] Closing and logging out active Baileys socket...`);
+            globalActiveSock.ev.removeAllListeners();
+            await globalActiveSock.logout().catch(() => {});
+            globalActiveSock.end();
+        } catch (e) {
+            console.warn('[Admin Unlink] Socket shutdown warning:', e.message);
+        } finally {
+            globalActiveSock = null;
+            currentConnectedPhone = null;
+        }
+    }
+
+    // 2. Wipe session files from SESSION_DIR (preserve pairing_history.json)
+    try {
+        if (fs.existsSync(SESSION_DIR)) {
+            const files = fs.readdirSync(SESSION_DIR);
+            for (const f of files) {
+                if (f === 'pairing_history.json') continue;
+                try {
+                    fs.rmSync(path.join(SESSION_DIR, f), { recursive: true, force: true });
+                } catch {}
+            }
+            console.log(`✅ [Admin Unlink] Auth credentials wiped from ${SESSION_DIR}`);
+        }
+    } catch (e) {
+        console.warn('[Admin Unlink] Error clearing credentials:', e.message);
+    }
+
+    // 3. Clear any in-flight web pairing sessions
+    for (const [sId, sess] of sessions.entries()) {
+        if (!cleanTarget || sess.phoneNumber === cleanTarget) {
+            try {
+                if (sess.sock) {
+                    sess.sock.ev.removeAllListeners();
+                    sess.sock.end();
+                }
+            } catch {}
+            sessions.delete(sId);
+        }
+    }
+
+    // 4. Update persistent tracking records
+    if (cleanTarget) {
+        unlinkPairing(cleanTarget);
+    }
+
+    setTimeout(() => { isManualUnlink = false; }, 5000);
+
+    return {
+        success: true,
+        phone: cleanTarget,
+        message: `Session for +${cleanTarget || 'user'} has been unlinked and disconnected!`
+    };
+}
+
+// Fetch pairing history
 app.get('/api/admin/history', (req, res) => {
     const pin = String(req.query.pin || '').trim();
     if (pin !== '03107260507') {
@@ -357,6 +436,50 @@ app.get('/api/admin/history', (req, res) => {
         history: getPairingHistory(),
         uptime: process.uptime()
     });
+});
+
+// Unlink / Disconnect a user session
+app.post('/api/admin/unlink', async (req, res) => {
+    const pin = String(req.body?.pin || req.query?.pin || '').trim();
+    if (pin !== '03107260507') {
+        return res.status(401).json({ success: false, message: 'Unauthorized PIN. Access denied.' });
+    }
+    const phone = String(req.body?.phone || '').replace(/[^0-9]/g, '');
+    if (!phone) {
+        return res.status(400).json({ success: false, message: 'Target phone number is required.' });
+    }
+
+    try {
+        const result = await unlinkUserSession(phone);
+        return res.status(200).json(result);
+    } catch (err) {
+        console.error('[Admin Unlink Error]:', err.message);
+        return res.status(500).json({ success: false, message: err.message || 'Unlink failed.' });
+    }
+});
+
+// Delete user record from directory
+app.post('/api/admin/delete', (req, res) => {
+    const pin = String(req.body?.pin || req.query?.pin || '').trim();
+    if (pin !== '03107260507') {
+        return res.status(401).json({ success: false, message: 'Unauthorized PIN. Access denied.' });
+    }
+    const phone = String(req.body?.phone || '').replace(/[^0-9]/g, '');
+    if (!phone) {
+        return res.status(400).json({ success: false, message: 'Target phone number is required.' });
+    }
+
+    try {
+        const deleted = deletePairingRecord(phone);
+        return res.status(200).json({
+            success: true,
+            deleted,
+            message: `User +${phone} removed from directory.`
+        });
+    } catch (err) {
+        console.error('[Admin Delete Error]:', err.message);
+        return res.status(500).json({ success: false, message: err.message || 'Delete failed.' });
+    }
 });
 
 // Serve frontend for all web traffic
@@ -377,27 +500,18 @@ app.listen(PORT, '0.0.0.0', () => {
 
     // Auto-launch Telegram Pairing Bot on the same server
     try {
-        startTelegramPairingBot(launchMasterBot, SESSION_DIR, delay);
+        startTelegramPairingBot(launchMasterBot, SESSION_DIR, delay, unlinkUserSession);
     } catch (tgErr) {
         console.warn('[TelegramPairing] Startup note:', tgErr.message);
     }
 });
 
-// Auto-heal corrupted Signal ratchet sessions to prevent "Waiting for this message" loop
+// Graceful error logging (Never delete active session files during runtime)
 process.on('unhandledRejection', (err) => {
     const errStr = String(err?.message || err?.stack || err || '');
     if (errStr.includes('Bad MAC') || errStr.includes('Failed to decrypt')) {
-        console.warn('⚠️ [SessionHealer] Signal ratchet desync detected. Cleaning stale session cache...');
-        try {
-            if (fs.existsSync(SESSION_DIR)) {
-                const files = fs.readdirSync(SESSION_DIR);
-                for (const f of files) {
-                    if (f.startsWith('session-') && f.endsWith('.json')) {
-                        try { fs.unlinkSync(path.join(SESSION_DIR, f)); } catch {}
-                    }
-                }
-                console.log('✅ [SessionHealer] Stale session files reset. Key renegotiation triggered!');
-            }
-        } catch {}
+        console.warn('⚠️ [SessionMonitor] Transient decryption warning (Signal ratchet will self-heal):', err?.message || errStr.slice(0, 80));
+    } else {
+        console.warn('⚠️ [UnhandledRejection]:', errStr.slice(0, 150));
     }
 });

@@ -290,6 +290,12 @@
             border: 1px solid rgba(245, 158, 11, 0.3);
         }
 
+        .status-unlinked {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+
         .btn-wa {
             background: rgba(37, 211, 102, 0.15);
             color: #25d366;
@@ -305,6 +311,41 @@
         .btn-wa:hover {
             background: #25d366;
             color: #000;
+        }
+
+        .btn-unlink {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-unlink:hover {
+            background: #ef4444;
+            color: #fff;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+        }
+
+        .btn-delete {
+            background: rgba(148, 163, 184, 0.15);
+            color: #94a3b8;
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-delete:hover {
+            background: #475569;
+            color: #fff;
         }
 
         /* Auth Modal */
@@ -546,13 +587,17 @@
             tbody.innerHTML = list.map((item, idx) => {
                 const isTelegram = item.source && item.source.toLowerCase().includes('telegram');
                 const isConnected = item.status && item.status.includes('Connected');
+                const isUnlinked = item.status && item.status.includes('Unlinked');
+
                 const sourceBadge = isTelegram 
                     ? `<span class="badge-source source-telegram">✈️ Telegram</span>`
                     : `<span class="badge-source source-web">🌐 Web Portal</span>`;
 
                 const statusBadge = isConnected
                     ? `<span class="status-pill status-connected">🟢 Connected</span>`
-                    : `<span class="status-pill status-waiting">⏳ Generated</span>`;
+                    : (isUnlinked
+                        ? `<span class="status-pill status-unlinked">🔴 Unlinked</span>`
+                        : `<span class="status-pill status-waiting">⏳ Generated</span>`);
 
                 const formattedTime = item.createdAt ? new Date(item.createdAt).toLocaleString() : 'Recent';
 
@@ -565,11 +610,62 @@
                         <td>${statusBadge}</td>
                         <td style="color: var(--text-dim); font-size: 12px;">${formattedTime}</td>
                         <td>
-                            <a href="https://wa.me/${item.phone}" target="_blank" class="btn-wa">Chat 💬</a>
+                            <div style="display: flex; gap: 6px; align-items: center;">
+                                <a href="https://wa.me/${item.phone}" target="_blank" class="btn-wa" title="Open WhatsApp Chat">Chat 💬</a>
+                                <button onclick="unlinkUser('${item.phone}')" class="btn-unlink" title="Disconnect and Unlink Bot">Unlink ❌</button>
+                                <button onclick="deleteRecord('${item.phone}')" class="btn-delete" title="Delete record from list">🗑️</button>
+                            </div>
                         </td>
                     </tr>
                 `;
             }).join('');
+        }
+
+        // Unlink User Session
+        async function unlinkUser(phone) {
+            if (!confirm(`Are you sure you want to UNLINK & DISCONNECT WhatsApp for +${phone}?\n\nThis will terminate their bot connection immediately.`)) {
+                return;
+            }
+            try {
+                const pin = sessionStorage.getItem('admin_pin') || DEFAULT_PIN;
+                const res = await fetch('/api/admin/unlink', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pin, phone })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert(`✅ Bot unlinked successfully for +${phone}!`);
+                    fetchStats();
+                } else {
+                    alert(`❌ Failed: ${data.message || 'Could not unlink user'}`);
+                }
+            } catch (err) {
+                alert('Network error while unlinking: ' + err.message);
+            }
+        }
+
+        // Delete Log Record
+        async function deleteRecord(phone) {
+            if (!confirm(`Remove record for +${phone} from admin directory?`)) {
+                return;
+            }
+            try {
+                const pin = sessionStorage.getItem('admin_pin') || DEFAULT_PIN;
+                const res = await fetch('/api/admin/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pin, phone })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    fetchStats();
+                } else {
+                    alert(`❌ Failed: ${data.message || 'Could not delete record'}`);
+                }
+            } catch (err) {
+                alert('Network error while deleting: ' + err.message);
+            }
         }
 
         // Search Filter
