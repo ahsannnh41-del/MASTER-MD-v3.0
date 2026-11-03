@@ -206,11 +206,8 @@ Please choose a shorter track.`
     } catch (err) {
         return reply(
 `❌ Failed to download audio.
-${String(err.message || 'Download error').replace(/\s+/g, ' ').slice(0, 300)}`
-        );
-    }
-
-Coba judul/lagu lain.`
+${String(err.message || 'Download error').replace(/\s+/g, ' ').slice(0, 300)}
+Please try another song or title.`
         );
     } finally {
         try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
