@@ -25,6 +25,7 @@ import baileysPkg, {
 import { processIncomingMessage } from './lib/messagePipeline.js';
 import { startTelegramPairingBot } from './lib/telegramPairing.js';
 import { logPairingAttempt, markPairingConnected, getPairingHistory, unlinkPairing, deletePairingRecord } from './lib/pairingTracker.js';
+import { groupMetadataCache } from './lib/groupMetaCache.js';
 import settings from './setting.js';
 import { verifyIntegrity } from './lib/integrity.js';
 
@@ -158,10 +159,12 @@ function attachFullBotPipeline(sock, rawNumber) {
                 }
 
                 console.log(`[MASTER MD] 📩 Message received (${type}) from: ${msg.key?.remoteJid} (fromMe: ${msg.key?.fromMe})`);
-                // Execute through the real MASTER MD pipeline (all 2000+ commands, admin, protection, media, RPG)
-                await processIncomingMessage(sock, msg);
+                // Execute through the real MASTER MD pipeline asynchronously (no blocking)
+                processIncomingMessage(sock, msg).catch(err => {
+                    console.error(`[MASTER MD Pipeline Error]:`, err.message);
+                });
             } catch (err) {
-                console.error(`[MASTER MD Pipeline Error]:`, err.message);
+                console.error(`[MASTER MD Upsert Error]:`, err.message);
             }
         }
     });
@@ -197,10 +200,7 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
     const sock = makeWASocket({
         version,
         logger: pinoLog,
-        auth: {
-            creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, pinoLog)
-        },
+        auth: state,
         msgRetryCounterCache,
         printQRInTerminal: false,
         browser: Browsers.macOS('Desktop'),
@@ -211,12 +211,22 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
         connectTimeoutMs: 60_000,
         defaultQueryTimeoutMs: 60_000,
         keepAliveIntervalMs: 10_000,
+        cachedGroupMetadata: async (jid) => groupMetadataCache.get(jid),
         getMessage: async (key) => {
-            const m = messageStore.get(key.id);
+            const m = messageStore.get(key?.id);
             if (m?.message) return m.message;
             if (m) return m;
-            return { conversation: '⚡ MASTER MD Active' };
+            return undefined;
         },
+    });
+
+    // Update group metadata cache on group updates
+    sock.ev.on('groups.update', async ([update]) => {
+        try {
+            if (!update?.id) return;
+            const metadata = await sock.groupMetadata(update.id);
+            groupMetadataCache.set(update.id, metadata);
+        } catch {}
     });
 
     // Auto-index all outgoing messages to eliminate "Waiting for this message" decryption retries
