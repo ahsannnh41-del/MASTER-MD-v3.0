@@ -140,7 +140,7 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
         },
         msgRetryCounterCache,
         printQRInTerminal: false,
-        browser: Browsers.macOS('Desktop'),
+        browser: Browsers.macOS('Chrome'),
         markOnlineOnConnect: true,
         syncFullHistory: false,
         shouldSyncHistoryMessage: () => false,
@@ -235,11 +235,22 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
 
             console.log(`[MASTER MD] Socket connection closed (Code: ${statusCode || 'unknown'}).`);
 
-            // Always reconnect on 515 (restartRequired) or if valid credentials exist, unless explicitly logged out or manually unlinked
-            const credsExist = fs.existsSync(path.join(customDir, 'creds.json'));
-            if (!isLoggedOut && !isManualUnlink && (isRestart || credsExist)) {
+            let credsRegistered = false;
+            try {
+                const credsPath = path.join(customDir, 'creds.json');
+                if (fs.existsSync(credsPath)) {
+                    const data = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
+                    credsRegistered = !!data.registered;
+                }
+            } catch {}
+
+            // Reconnect on 515 (restartRequired during successful pairing) OR if session is registered!
+            // NEVER destroy an unlinked pairing socket while waiting for the user to type the code!
+            if (!isLoggedOut && !isManualUnlink && (isRestart || credsRegistered)) {
                 console.log(`[MASTER MD] Reconnecting socket to finalize session (Status: ${statusCode || 515})...`);
-                setTimeout(() => launchMasterBot(customDir, rawNumber), 3000);
+                setTimeout(() => launchMasterBot(customDir, rawNumber), 2500);
+            } else {
+                console.log(`[MASTER MD] Disconnected without registered session (Code: ${statusCode || 'unknown'}).`);
             }
         }
     });
@@ -574,11 +585,13 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🌐 Live URL  : http://localhost:${PORT}`);
     console.log('═'.repeat(60) + '\n');
 
-    // Auto-launch Telegram Pairing Bot on the same server
-    try {
-        startTelegramPairingBot(launchMasterBot, SESSION_DIR, delay, unlinkUserSession);
-    } catch (tgErr) {
-        console.warn('[TelegramPairing] Startup note:', tgErr.message);
+    // Auto-launch Telegram Pairing Bot on the same server only if explicitly enabled
+    if (process.env.ENABLE_INTERNAL_TELEGRAM === 'true') {
+        try {
+            startTelegramPairingBot(launchMasterBot, SESSION_DIR, delay, unlinkUserSession);
+        } catch (tgErr) {
+            console.warn('[TelegramPairing] Startup note:', tgErr.message);
+        }
     }
 });
 

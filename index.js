@@ -492,7 +492,7 @@ async function startBot() {
         logger: baileysLogger,
         auth:   state,
         printQRInTerminal: false,
-        browser: Browsers.macOS('Desktop'),
+        browser: Browsers.macOS('Chrome'),
         markOnlineOnConnect: settings.markOnlineOnConnect || false,
         syncFullHistory: false,
         // FIX: tanpa nilai ini, operasi seperti sendMessage/sendPresenceUpdate
