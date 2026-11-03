@@ -1,0 +1,41 @@
+{
+  "name": "master-md",
+  "version": "3.0.0",
+  "description": "MASTER MD — Ultimate WhatsApp Multi-Device Bot developed by AHSAN. 2000+ features, Interactive Buttons, Web Pairing System, Anti-Theft Code Protection.",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "bot": "node index.js",
+    "build": "echo MASTER-MD Build Ready",
+    "dev": "node --watch index.js",
+    "pair-server": "node web-pairing/server.js",
+    "build:protect": "node scripts/encrypt.js",
+    "audit": "node scripts/auditBot.mjs"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "6.7.23",
+    "@hapi/boom": "^10.0.1",
+    "pino": "^9.0.0",
+    "@cacheable/node-cache": "^3.1.1",
+    "webp-wasm": "^1.0.6",
+    "ffmpeg-static": "^5.2.0",
+    "axios": "^1.7.9",
+    "@heyputer/puter.js": "^1.0.0",
+    "express": "^4.21.2",
+    "cors": "^2.8.5",
+    "javascript-obfuscator": "^4.1.1"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "keywords": [
+    "whatsapp-bot",
+    "baileys",
+    "master-md",
+    "ahsan",
+    "multi-device",
+    "pairing-code",
+    "buttons"
+  ]
+}

@@ -1,0 +1,1628 @@
+import settings from '../setting.js';
+import { verifyIntegrity } from '../lib/integrity.js';
+
+verifyIntegrity(settings);
+import { fmtDuration, safeReplyText, truncate, withTimeout } from '../lib/utils.js';
+import { resolveFfmpegPath } from '../lib/videoGen.js';
+import { spawn } from 'child_process';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { getChar } from '../lib/rpgEngine.js';
+import { expNeeded } from '../lib/rpgData.js';
+import { log } from '../lib/logger.js';
+import { markMenuPending } from '../lib/menuShortcut.js';
+import { getGroupMetadata } from '../lib/groupMetaCache.js';
+import { getThumbnailImageContent } from '../lib/thumbnailSource.js';
+import { mapChars, SMALLCAPS_MAP } from './toolsCommands11.js';
+import { GOJO_2000_FEATURES } from './featureRegistry2000.js';
+
+// FIX "font beda dari contoh": label section .menu sebelumnya pakai gaya
+// unicode Bold-Italic Sans (𝙉𝙖𝙢𝙖, 𝑵𝑶𝑻𝑬, dst) — beda gaya sama contoh
+// referensi yang dikasih user (gaya small-caps, mis. "ʙᴏᴛ ɪɴғᴏ"). sc()
+// pakai SMALLCAPS_MAP yang SAMA persis dengan command .smallcaps yang
+// sudah ada, supaya gaya font di .menu konsisten dengan tool bawaan bot.
+// Diekspor (bukan cuma dipakai internal) supaya .allmenu di commands/index.js
+// bisa pakai helper font yang SAMA — biar font section header di .allmenu
+// konsisten dengan .menu, .menurpg, .menuadmin, dst (semua satu sumber).
+export const sc = (text) => mapChars(text.toLowerCase(), SMALLCAPS_MAP);
+
+const P   = settings.prefix   || '.';
+const BOT = settings.botName  || 'MASTER MD';
+const TAG = settings.botTagline || '⚡ Next-Gen WhatsApp Multi-Device Powerhouse by AHSAN ⚡';
+
+
+// Registry category helper
+const REGISTRY_CATEGORY_RANGES = {
+    '🛡️ Admin': [[45,147],[245,270],[303,314],[396,404],[690,764]],
+    '🎮 Fun': [[148,173],[315,329],[405,424],[475,510]],
+    '🛠️ Tools': [[9,44],[174,198],[223,244],[295,302],[329,349],[350,395],[425,474],[510,517],[517,599],[628,633],[651,690]],
+    '🖼️ Media': [[291,294],[600,627],[634,650]],
+    '🤖 Bot': [[199,222],[611,618],[691,717],[767,769]],
+    '📥 Downloader': [[770,783]],
+};
+
+const REGISTRY_CATEGORY_PREFIX = {
+    admin: '🛡️ Admin', fun: '🎮 Fun', tool: '🛠️ Tools',
+    media: '🖼️ Media', bot: '🤖 Bot', social: '📥 Downloader',
+};
+
+function registryCategory(name) {
+    const n = String(name || '').toLowerCase();
+    const prefix = Object.keys(REGISTRY_CATEGORY_PREFIX).find(p => n.startsWith(p));
+    if (prefix) return REGISTRY_CATEGORY_PREFIX[prefix];
+    if (['sewa','ceksewa','delsewa','listsewa','extsewa','hargasewa','gantihargasewa','sewamode'].includes(n)) return '🛒 Rental';
+    if (['brat','bratgreen','bratwhite','iqc','repost'].includes(n)) return '🖼️ Media';
+    if (['self','public','private','autojoin','whoami','runtime','jam'].includes(n)) return '🤖 Bot';
+    if (['menu','menurpg','menuadmin','menufun','menutools','menumedia','menubot','totalfitur','daftar'].includes(n)) return '🤖 Bot';
+    const i = GOJO_2000_FEATURES.indexOf(n);
+    for (const [cat, blocks] of Object.entries(REGISTRY_CATEGORY_RANGES)) {
+        if (blocks.some(([a,b]) => i >= a && i <= b)) return cat;
+    }
+    if (n === 'play') return '🎵 Music';
+    if (['broadcast','broadcastuser','listgrup'].includes(n)) return '📢 Broadcast';
+    if (n === 'cpanel') return '🖥️ Panel';
+    if (['sewa','ceksewa','delsewa','listsewa','extsewa','hargasewa','gantihargasewa','sewamode'].includes(n)) return '🛒 Rental';
+    return '📦 Miscellaneous';
+}
+
+function compactMenuDescription(name) {
+    const text = getFeatureDescription(name);
+    if (text.length <= 34) return text;
+    return text.slice(0, 34).replace(/[ ,.;:!?-]+$/,'') + '…';
+}
+
+const CURATED_MENU_COMMANDS = new Set([
+    'achievement',
+    'add',
+    'addannouncement',
+    'addbadword',
+    'addjadwal',
+    'addmembernote',
+    'addnote',
+    'addowner',
+    'addprem',
+    'admincount',
+    'afirmasihariini',
+    'aktivitasgrup',
+    'allmenu',
+    'allowlinkadd',
+    'allowlinkdel',
+    'allowlinklist',
+    'alternating',
+    'anagram',
+    'angkakeberuntungan',
+    'anticaps',
+    'antidelete',
+    'antigb',
+    'antijudol',
+    'antilink',
+    'antilinkall',
+    'antilinkphising',
+    'antinsfw',
+    'antipinjol',
+    'antishortlink',
+    'antispam',
+    'antitag',
+    'antitoxic',
+    'antivirtex',
+    'approveall',
+    'approverequest',
+    'asciitext',
+    'assigntask',
+    'atbash',
+    'aturautobalas',
+    'autoreply',
+    'average',
+    'averagespeed',
+    'backupnow',
+    'backupsetting',
+    'ban',
+    'banlist',
+    'beli',
+    'binaryops',
+    'blokirpengguna',
+    'bmi',
+    'bmidetail',
+    'bmr',
+    'boss',
+    'bossinfo',
+    'botstats',
+    'bounty',
+    'brat',
+    'brighten',
+    'broadcast',
+    'broadcastuser',
+    'buatpolling',
+    'bukablokirpengguna',
+    'bulkdemote',
+    'bulkkick',
+    'bulkpromote',
+    'businessdays',
+    'buypet',
+    'caesardekrip',
+    'caesarenkrip',
+    'calc',
+    'camelcase',
+    'canceljadwalgrup',
+    'cekaturangrup',
+    'cekbot',
+    'cekcc',
+    'cekemail',
+    'cekjabatan',
+    'cekjadwalgrup',
+    'ceknohp',
+    'cekpalindrom',
+    'cekpassword',
+    'cekprima',
+    'cekwarnall',
+    'changelog',
+    'checkwarn',
+    'circlearea',
+    'claimbounty',
+    'class',
+    'clearlaporan',
+    'coinflip',
+    'compliment',
+    'compoundinterest',
+    'convertlength',
+    'convertweight',
+    'cook',
+    'cpanel',
+    'craft',
+    'createevent',
+    'credits',
+    'currencyformat',
+    'dadjoke',
+    'daily',
+    'dare',
+    'delannouncement',
+    'delay',
+    'delbadword',
+    'deljadwal',
+    'delmembernote',
+    'delnote',
+    'delowner',
+    'delprem',
+    'deltemplate',
+    'demote',
+    'dice',
+    'digitalroot',
+    'diskon',
+    'divorce',
+    'dogyears',
+    'donetask',
+    'drawcard',
+    'dungeon',
+    'dungeoninfo',
+    'emojirandom',
+    'ephemeral',
+    'equip',
+    'equiptitle',
+    'eventattendees',
+    'expedition',
+    'exportmember',
+    'extractaudio',
+    'extractnumbers',
+    'fact',
+    'faktorial',
+    'farewell',
+    'farmstatus',
+    'fibonacci',
+    'fish',
+    'flipvertical',
+    'fortunecookie',
+    'frekuensikata',
+    'frombase64',
+    'frombinary',
+    'fromhex',
+    'frommorse',
+    'fueleff',
+    'gacha',
+    'gcdlcm',
+    'genpassword',
+    'genuuid',
+    'gojo',
+    'gojoai',
+    'gojofact',
+    'gojohype',
+    'gojopower',
+    'gojoroast',
+    'gojoteknik',
+    'gpacalc',
+    'grayscale',
+    'groupage',
+    'groupcreator',
+    'groupinfo',
+    'grouplinkqr',
+    'grouplockstatus',
+    'groupsummary',
+    'guesshilo',
+    'guildcreate',
+    'guilddisband',
+    'guilddonate',
+    'guildinfo',
+    'guildjoin',
+    'guildkick',
+    'guildleave',
+    'guildlist',
+    'guildmembers',
+    'guildpromote',
+    'guildupgrade',
+    'hammingdistance',
+    'hapusicon',
+    'hapuspengumuman',
+    'hapusvokal',
+    'harike',
+    'harvest',
+    'hashtaggen',
+    'hasilpoll',
+    'hd',
+    'helpproteksi',
+    'hex2rgb',
+    'hidetag',
+    'hitungkonsonan',
+    'hitungtip',
+    'hitungvokal',
+    'hunt',
+    'ibancheck',
+    'ig',
+    'inventory',
+    'iqc',
+    'istirahat',
+    'jadibot',
+    'jadwalbuka',
+    'jadwaltutup',
+    'jam',
+    'jawabriddle2',
+    'jawabscramble',
+    'jawabtrivia',
+    'joblist',
+    'jodoh',
+    'jsonvalidate',
+    'jual',
+    'katahariini',
+    'kebabcase',
+    'kepribadianhariini',
+    'kerja',
+    'kick',
+    'kickall',
+    'kicksider',
+    'klaimekspedisi',
+    'konspirasi',
+    'kuadrat',
+    'lapor',
+    'lawan',
+    'leaderboard',
+    'leapyear',
+    'leapyearlist',
+    'leave',
+    'leet',
+    'levenshtein',
+    'lihatautobalas',
+    'lihatcatatan',
+    'link',
+    'listadmin',
+    'listannouncement',
+    'listautoreply',
+    'listbadword',
+    'listbirthday',
+    'listevents',
+    'listgrup',
+    'listinactive',
+    'listjadibot',
+    'listjadwal',
+    'listlaporan',
+    'listmembernote',
+    'listmutedmember',
+    'listowner',
+    'listpoll',
+    'listprem',
+    'listrequest',
+    'listsuggestions',
+    'listtasks',
+    'listtemplate',
+    'listunique',
+    'loadtemplate',
+    'lockaudio',
+    'lockcontact',
+    'lockdocument',
+    'lockgif',
+    'lockgroup',
+    'lockimage',
+    'lockinfo',
+    'locklocation',
+    'lockmedia',
+    'lockpoll',
+    'lockstiker',
+    'locktext',
+    'lockvideo',
+    'lockvn',
+    'loremipsum',
+    'lovecalc',
+    'lower',
+    'magic8ball',
+    'maintenancemode',
+    'marry',
+    'massconvert',
+    'mbtitoday',
+    'mediainfo',
+    'median',
+    'membercount',
+    'menuadmin',
+    'menubot',
+    'menumedia',
+    'menurpg',
+    'menutools',
+    'mine',
+    'moodku',
+    'motd',
+    'mute',
+    'mutemember',
+    'mutestatus',
+    'mutevideo',
+    'mytasks',
+    'nabung',
+    'ncr',
+    'nextweekday',
+    'nomorhoki',
+    'notes',
+    'numeronim',
+    'owner',
+    'pantun',
+    'pembayaran',
+    'pembukacerita',
+    'pengagumrahasia',
+    'pengumuman',
+    'pernahkah',
+    'persen',
+    'persenubah',
+    'petinfo',
+    'petshop',
+    'pilih',
+    'pilihini',
+    'ping',
+    'pingenerate',
+    'plant',
+    'play',
+    'poll',
+    'pollclose',
+    'pollnative',
+    'pp',
+    'ppgrup',
+    'pressureconvert',
+    'prestige',
+    'previewwelcome',
+    'profil',
+    'promote',
+    'pujianrandom2',
+    'qrcode',
+    'quest',
+    'questclaim',
+    'quicklock',
+    'quickunlock',
+    'quote',
+    'railfence',
+    'randomcolorname',
+    'randomname',
+    'randomword',
+    'ranking',
+    'ratehariini',
+    'rayuan',
+    'readingtime',
+    'recipes',
+    'refine',
+    'regextest',
+    'rejectall',
+    'rejectrequest',
+    'removedupewords',
+    'removepunctuation',
+    'repost',
+    'resetprotection',
+    'resetwarnall',
+    'restoresetting',
+    'retirement',
+    'reverse',
+    'reversevideo',
+    'revoke',
+    'riddle',
+    'riddle2',
+    'roast',
+    'rob',
+    'rolldadu',
+    'rollnotation',
+    'roman',
+    'rot13',
+    'rot47',
+    'rotate90',
+    'rpg',
+    'rps',
+    'rsvp',
+    'rules',
+    'runtime',
+    'savetemplate',
+    'sepia',
+    'setbirthday',
+    'setdesc',
+    'setfarewell',
+    'seticon',
+    'setmotd',
+    'setname',
+    'setpengumuman',
+    'setpet',
+    'setrules',
+    'setwelcome',
+    'sewa',
+    'shorturl',
+    'shuffle',
+    'sider',
+    'simpancatatan',
+    'simplifyfraction',
+    'sisahari',
+    'slot',
+    'slowmode',
+    'slowmodeoff',
+    'slugify',
+    'snakecase',
+    'sosmedowner',
+    'speedup',
+    'splitbill',
+    'statdetail',
+    'statistikgrup',
+    'statsgrupmember',
+    'stdev',
+    'sticker',
+    'stopbot',
+    'strikethrough',
+    'suggest',
+    'suhu',
+    'suhulengkap',
+    'support',
+    'syllable',
+    'tagall',
+    'tanggalrandom',
+    'tantanganrandom',
+    'tarik',
+    'tarot',
+    'tax',
+    'tebak',
+    'tebakangka',
+    'tebakgambar',
+    'tebakhilo',
+    'textascii',
+    'threads',
+    'tiktok',
+    'timeconvert',
+    'titlecase',
+    'titles',
+    'tobase32',
+    'tobase36',
+    'tobase58',
+    'tobase64',
+    'tobinary',
+    'tobotak',
+    'tohex',
+    'tohijab',
+    'toko',
+    'tomorse',
+    'topactive',
+    'topwarn',
+    'topwords',
+    'toroblox',
+    'totalfitur',
+    'train',
+    'transfer',
+    'trapezoidarea',
+    'trimspaces',
+    'trivia',
+    'truth',
+    'ulangteks',
+    'umur',
+    'unban',
+    'unbanall',
+    'unlockgroup',
+    'unlockinfo',
+    'unmute',
+    'unmutemember',
+    'unwarn',
+    'upper',
+    'upsidedown',
+    'urlencode',
+    'use',
+    'version',
+    'vigenere',
+    'volumeup',
+    'vote',
+    'votekick',
+    'warn',
+    'warnall',
+    'warnarandom',
+    'warnlimit',
+    'water',
+    'watermark',
+    'welcome',
+    'whitelist',
+    'whitelistadd',
+    'whitelistdel',
+    'whoami',
+    'windchill',
+    'wordcount',
+    'wordscramble',
+    'wyr',
+    'zodiak',
+    'zodiaklahir',
+    'opengroup',
+    'closegroup',
+    'terimarequest',
+    'tolakrequest',
+    'terimasemua',
+]);
+
+
+function registrySubcategory(name, category) {
+    const n = String(name || '').toLowerCase();
+
+    if (category === '🛡️ Admin') {
+        if (/(approve|reject|request|terima|tolak)/.test(n)) return '📥 Approval & Join Request';
+        if (/(kick|promote|demote|add|remove|member|mutemember|unmutemember|listadmin|admincount|bulk)/.test(n)) return '👥 Manajemen Member';
+        if (/(owner|creator|premium|role|jabatan|permission|access)/.test(n)) return '👑 Jabatan & Hak Akses';
+        if (/(warn|warning|strike)/.test(n)) return '⚠️ Warning & Moderasi';
+        if (/(lockimage|lockvideo|lockdocument|lockcontact|locklocation|lockvn|lockaudio|lockgif|lockpoll|locktext|locksticker|lockmedia)/.test(n)) return '🔒 Lock Konten';
+        if (/(anti|protect|secure|phishing|nsfw|spam|toxic|virtex|judol|pinjol|caps|flood)/.test(n)) return '🛡️ Proteksi';
+        if (/(badword|allowlink|whitelist|antilink|link|revoke)/.test(n)) return '🔗 Link, Kata & Whitelist';
+        if (/(welcome|farewell)/.test(n)) return '👋 Welcome & Farewell';
+        if (/(poll|vote|jadwal|schedule)/.test(n)) return '📊 Poll & Jadwal';
+        if (/(event|rsvp|birthday|task|quicklock|quickunlock)/.test(n)) return '🎉 Event & Tugas';
+        if (/(announcement|pengumuman|membernote|template|catatan|note|motd|autoreply)/.test(n)) return '📝 Pengumuman, Catatan & Template';
+        if (/(audit|report|lapor|laporan)/.test(n)) return '🧾 Audit & Laporan';
+        if (/(monitor|activity|aktivitas|stats|statistik)/.test(n)) return '📈 Monitoring & Statistik';
+        if (/(backup|restore)/.test(n)) return '💾 Backup & Restore';
+        if (/(group|open|close|setname|setdesc|icon|ephemeral|rules|setting)/.test(n)) return '⚙️ Pengaturan Grup';
+        if (/(summary|groupage|exportmember|cekbot)/.test(n)) return '📋 Dashboard Grup';
+        return '📦 Admin Lainnya';
+    }
+
+    if (category === '🛠️ Tools') {
+        if (/(binary|base|hex|morse|rot|caesar|vigenere|atbash|cipher|encode|decode|ascii|urlencode|urldecode|htmlencode|htmldecode)/.test(n)) return '🔐 Encoding & Cryptography';
+        if (/(calc|persen|bmi|prima|faktorial|fibonacci|gcd|lcm|average|median|mode|fraction|interest|loan|roi|tax|discount|gpa|roman|number|area|volume|convert.*(length|weight|temperature|suhu|mass|volume|pressure|angle|currency))/.test(n)) return '🔢 Math & Converters';
+        if (/(uppercase|lower|upper|reverse|alternating|titlecase|camelcase|snakecase|kebabcase|leet|wordcount|vokal|konsonan|ulangteks|frekuensi|slugify|anagram|syllable|readingtime|smallcaps|upsidedown|zalgo|strikethrough|underline|circledtext|fullwidth|textanalysis|capitalize|trimspaces|countchar|removedupewords|strlen|reversenumber)/.test(n)) return '🔤 Text Manipulation';
+        if (/(email|nohp|cc|password|palindrom|palindrome|iban|macvalidate|ipv4|regex|jsonvalidate|isnumeric)/.test(n)) return '✅ Validators & Checkers';
+        if (/(genpassword|uuid|pilih|shuffle|random|coupon|pingenerate|drawcard|hashtag|numbertowords|numeronim|passphrase|acronym)/.test(n)) return '🎲 Generators & Random';
+        if (/(hari|tanggal|date|year|umur|age|weekday|weeknumber|quarter|businessdays|zodiak|timeconvert|ageinseconds|sisahari|daysinmonth)/.test(n)) return '📅 Date & Time Tools';
+        if (/(diskon|bill|tip|currency|retirement|bmr|idealweight|waterintake|fueleff|cookingconvert|electricitybill)/.test(n)) return '💸 Financial Calculators';
+        if (/(qrcode|shorturl|url|html|json|regex|extractemails|extracturls)/.test(n)) return '🌐 Web & URL Data';
+        return '🛠️ Other Tools';
+    }
+
+    if (category === '🖼️ Media') {
+        if (/(sticker|stiker|brat|iqc)/.test(n)) return '🎭 Stickers & Text';
+        if (/(hd|grayscale|mirror|blur|rotate|sepia|invert|pixelate|brighten|darken|flip|square|watermark)/.test(n)) return '🎨 Image Effects & Edit';
+        if (/(speed|slowmo|mutevideo|reversevideo|extractaudio|volumeup)/.test(n)) return '🎬 Video & Audio Effects';
+        if (/(pp|profile|avatar)/.test(n)) return '👤 Profiles & Avatars';
+        if (/(repost|mediainfo)/.test(n)) return '🔁 Repost & Media Info';
+        return '🖼️ Other Media Tools';
+    }
+
+    if (category === '🎮 Fun') {
+        if (/(trivia|riddle|tebak|guess|scramble|rps|dice|coin|slot|magic8|tarot)/.test(n)) return '🎲 Mini Games';
+        if (/(jodoh|love|wyr|zodiak|mood|pengagum|rayuan|pernahkah)/.test(n)) return '💕 Social & Fun';
+        if (/(quote|fact|pantun|kata|afirmasi|wejangan)/.test(n)) return '💬 Quotes & Fun Facts';
+        if (/gojo/.test(n)) return '⚡ MASTER Specials';
+        if (/(roast|compliment|pujian|tantangan|dare|truth)/.test(n)) return '🎭 Interactive Entertainment';
+        return '🎮 Other Fun Commands';
+    }
+
+    if (category === '🤖 Bot') {
+        if (/(menu|totalfitur|daftar|version|runtime|ping|whoami)/.test(n)) return 'ℹ️ Info & System Status';
+        if (/(self|public|private|autojoin|autoread|autotyping)/.test(n)) return '⚙️ Modes & Automation';
+        if (/(jadibot|stopbot|listjadibot)/.test(n)) return '🤖 Web Pairing & Sub-Bots';
+        if (/(stats|system|database|session)/.test(n)) return '📊 System & Statistics';
+        return '🤖 Other Bot Tools';
+    }
+
+    if (category === '🎵 Music') return '🎵 Music & YouTube';
+    if (category === '📥 Downloader') {
+        if (/(ig|instagram|tiktok|twitter|facebook|threads|reddit|bilibili|dailymotion|vimeo|snackvideo|pinterest)/.test(n)) return '📱 Social Media Downloader';
+        if (/(yt|youtube|play)/.test(n)) return '🎵 YouTube & Music';
+        return '📥 Other Downloaders';
+    }
+    if (category === '📢 Broadcast') return '📢 Broadcast Tools';
+    if (category === '🖥️ Panel') {
+        if (/(create|make|add)/.test(n)) return '🖥️ Server Creation';
+        if (/(delete|del|remove)/.test(n)) return '🗑️ Server Management';
+        if (/(role|admin|seller)/.test(n)) return '👥 Roles & Access';
+        return '⚙️ Panel & Hosting';
+    }
+    if (category === '🌀 Gojo') return '⚡ MASTER AI & Specials';
+    if (category === '🛒 Sewa') return '🛒 Bot Rental';
+    if (category === '💎 Premium') return '💎 Premium Access';
+    return '📦 Miscellaneous';
+}
+
+function buildRegistryCategoryPack(category, label = category) {
+    const names = GOJO_2000_FEATURES
+        .filter(n => registryCategory(n) === category)
+        .filter(n => !['gamble','lottery','bettinggold'].includes(String(n).toLowerCase()))
+        .filter(n => !CURATED_MENU_COMMANDS.has(String(n).toLowerCase()));
+    if (!names.length) return '';
+
+    const groups = new Map();
+    for (const name of names) {
+        const sub = registrySubcategory(name, category);
+        if (!groups.has(sub)) groups.set(sub, []);
+        groups.get(sub).push(name);
+    }
+
+    const blocks = [...groups.entries()].map(([sub, list]) => {
+        const lines = list.sort().map(name => `│ ${P}${name} — ${compactMenuDescription(name)}`);
+        return `\n╭─〔 ${sub} 〕\n${lines.join('\n')}\n╰──────────────────────────────`;
+    }).join('\n');
+
+    return `\n${blocks}`;
+}
+
+// ─── MENU UTAMA (RINGKAS) ─────────────────────────────────────────
+// Sengaja dibuat singkat — info lengkap (proteksi aktif & daftar semua
+// command) dipindahkan ke .allmenu, supaya .menu cepat dibaca sekilas.
+// Struktur info (Nama/Status/Uptime/Respon/Versi/Mode/Prefix) terinspirasi
+// dari format menu bot lain yang dicontohkan user, disesuaikan ke identitas
+// GOJO SATORU MD V2.
+// FIX (rebranding V2): tambah sapaan + perkenalan singkat di baris paling
+// awal menuText (sebelum box header) sesuai permintaan user — dirender di
+// KEDUA jalur (interactive button & fallback text) karena keduanya pakai
+// variabel menuText yang sama, jadi cukup diubah di satu tempat ini.
+export async function sendMainMenu(reply, sender, sock, jid, msg, opts = {}) {
+    const now     = Date.now();
+    const { isOwner = false, isPremium = false, pushName = null, botStartTime = now, totalFeatures = 0, featureList = [] } = opts;
+
+    let latensi = 0;
+    if (sock && jid) {
+        const t0 = Date.now();
+        try { await sock.sendPresenceUpdate('composing', jid); } catch { /* abaikan */ }
+        latensi = Date.now() - t0;
+    }
+
+    const statusLabel = isOwner ? 'Owner 👑' : isPremium ? 'Premium 💎' : 'Free 🌿';
+    const namaTampil  = pushName || (sender ? sender.split('@')[0] : 'Kakak');
+
+    // Data tambahan buat header premium (v3.2.2) — semuanya baca dari
+    // variabel/API yang sudah ada (settings, process bawaan Node.js),
+    // tidak ada state/logic baru yang ditambahkan.
+    const mode        = settings.public !== false ? 'Public' : 'Private';
+    const nodeVersion = process.version;
+    const ramUsageMb  = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
+
+    const userLines =
+`┃ ⟤ ⚡ ${sc('Features')}  : 2000+ Commands Active\n┃ ⟤ 🚀 ${sc('Speed')}     : Lightning Fast Engine\n┃ ⟤ 🛡️ ${sc('Security')}  : Multi-Layer Anti-Spam & Protection`;
+
+    const menuText =
+`👋 Assalam-o-Alaikum, *${namaTampil}*! Welcome to *${BOT}* ⚡ — developed by *AHSAN*.
+_${TAG}_
+
+┏ 👤 ${sc('User')}     : ${namaTampil}
+┃ 👑 ${sc('Developer')}: AHSAN (03107260507)
+┃ 🌟 ${sc('Status')}   : ${statusLabel}
+┗ ⚡ ${sc('Mode')}     : ${mode}
+
+┏ 📦 ${sc('Version')}  : v${settings.botVersion || '3.0.0'}
+┃ 🟢 ${sc('Node.js')}  : ${nodeVersion}
+┗ 📚 ${sc('Engine')}   : Baileys Multi-Device
+
+┏ 💾 ${sc('RAM')}      : ${ramUsageMb} MB
+┃ ⏰ ${sc('Runtime')}  : ${fmtDuration(now - botStartTime)}
+┃ 📊 ${sc('Features')} : ${totalFeatures} Active
+┗ 🔖 ${sc('Prefix')}   : ${P}
+
+${sc('Fast')} • ${sc('Stable')} • ${sc('Secure')}
+⚡ ${sc('DEVELOPED BY')} : AHSAN
+🌐 ${settings.channelName || 'MASTER MD Official'}
+
+${userLines}
+
+╭─〔 📋 ${sc('Quick Navigation')} 〕
+│ ❍ *1* — 🤖 All Commands (${P}allmenu)
+│ ❍ *2* — 👑 Developer Info (${P}owner)
+│ ❍ *3* — 🔑 Web Pairing (${P}pair)
+│ ❍ *4* — 📢 Channel Link (${P}credits)
+│ ❍ *5* — 🛡️ Admin Menu (${P}menuadmin)
+│ ❍ *6* — 🧠 AI Supercharged (${P}ai)
+│ ❍ *7* — 📥 Media & Download (${P}menumedia)
+│ ❍ *8* — 🛠️ Tools & Utils (${P}menutools)
+│ ❍ *9* — ⚡ Ping & Speed (${P}ping)
+╰────────────
+_Use buttons below or type any command!_`;
+
+    const RPG_IGNORE = new Set([
+        'rpg','menurpg','profil','class','inventory','equip','unequip','use','istirahat','statdetail',
+        'hunt','lawan','boss','dungeon','bossinfo','dungeoninfo','toko','beli','jual','daily','kerja',
+        'joblist','nabung','tarik','transfer','rob','gacha','expedition','klaimekspedisi','petshop',
+        'buypet','petinfo','setpet','quest','questclaim','achievement','ranking','leaderboard','marry',
+        'divorce','mine','fish','craft','refine','train','prestige','guildcreate','guildjoin','guildleave',
+        'guildinfo','guildmembers','guildlist','guilddonate','guildupgrade','guildpromote','guildkick',
+        'guilddisband','plant','water','harvest','farmstatus','cook','recipes','titles','equiptitle','bounty','claimbounty'
+    ]);
+
+    const featureCounts = {};
+    for (const name of featureList) {
+        const n = String(name).toLowerCase();
+        if (RPG_IGNORE.has(n) || n.startsWith('rpg')) continue;
+        const cat =
+            n.startsWith('admin') ? '🛡️ Admin & Moderation' :
+            n.startsWith('fun') ? '🎮 Fun & Games' :
+            n.startsWith('tool') ? '🛠️ Tools & Utilities' :
+            n.startsWith('media') ? '🖼️ Media & Editing' :
+            n.startsWith('social') || ['ytmp3','ytmp4','tiktok','ig','play','fb'].includes(n) ? '📥 Downloaders' :
+            n.startsWith('bot') || ['ping','alive','runtime','speed','owner'].includes(n) ? '🤖 Bot & System' :
+            n.startsWith('ai') ? '🧠 AI Supercharged' : '📦 Miscellaneous';
+        featureCounts[cat] = (featureCounts[cat] || 0) + 1;
+    }
+    const featureSummary = Object.entries(featureCounts)
+        .map(([cat, count]) => `│ ❍ ${cat} : *${count} features*`)
+        .join('\n');
+
+    const completeMenuText = menuText + `
+
+╭─〔 📚 ${sc('Feature Pack')} 〕
+${featureSummary}
+│
+│ ${P}allmenu — View all 2,000+ active commands
+│ ${P}menuadmin — Admin & Moderation tools
+│ ${P}menutools — Utility tools & converters
+│ ${P}menumedia — Media downloaders & video tools
+│ ${P}ai — AI assistant & image generation
+╰────────────`;
+    // FIX (percobaan ke-12 — dikonfirmasi lewat dokumentasi Baileys +
+    // laporan bug serupa persis di GitHub resminya: "sendMessage() akan
+    // mengambil daftar participant grup dulu untuk enkripsi ke tiap
+    // anggota" sebelum benar-benar mengirim; relayMessage() dipanggil
+    // langsung TIDAK melakukan ini otomatis). Percobaan ke-11 (ganti ke
+    // shape { text, buttons, footer } yang "dikenal" sock.sendMessage())
+    // memang jadi bisa terkirim & KEBUKTI didekripsi normal — TAPI
+    // nativeFlowInfo custom di button ke-2 hilang di tengah jalan (proses
+    // konstruksi internal Baileys utk shape ini kemungkinan cuma menyalin
+    // field yang dikenalnya per button, bukan copy-paste objek apa
+    // adanya) — makanya tombol interaktifnya tidak muncul lagi.
+    // Sekarang: BALIK ke struktur proto mentah (generateWAMessageFromContent
+    // + relayMessage) yang SUDAH TERBUKTI render tombol interaktif dengan
+    // benar sejak awal — tapi sebelum relayMessage dipanggil, metadata
+    // grup di-pastikan fresh dulu lewat getGroupMetadata() (helper yang
+    // SUDAH ADA di lib/groupMetaCache.js, dipakai index.js juga) — supaya
+    // bagian yang selama ini hilang dari jalur relayMessage manual
+    // (daftar participant utk enkripsi) sudah tersedia SEBELUM pesan
+    // benar-benar dikirim.
+    // Header gambar DISAMBUNG LAGI di sini (headerType:4 + upload fresh
+    // tiap kali, dibungkus timeout) — percobaan ke-6 s/d ke-9 yang dulu
+    // gagal SEMUANYA lewat jalur relayMessage yang SAMA-SAMA belum punya
+    // fix getGroupMetadata ini, jadi ada kemungkinan besar kegagalannya
+    // bukan soal teknik headernya, tapi ikut kena masalah dekripsi yang
+    // sama dengan tombolnya. Upload gagal/lambat → fallback headerType:1
+    // (tombol tetap terkirim tanpa gambar) alih-alih gagal total.
+    if (sock && jid) {
+        try {
+            const { generateWAMessageFromContent, prepareWAMessageMedia, proto } = await import('@whiskeysockets/baileys');
+
+            if (jid.endsWith('@g.us')) {
+                try {
+                    await withTimeout(getGroupMetadata(sock, jid), 15_000, 'getGroupMetadata(menu)');
+                } catch (metaErr) {
+                    log?.warn?.(`[menu] refresh metadata grup: ${metaErr.message}`);
+                }
+            }
+
+            let headerImageMessage = null;
+            try {
+                const media = await withTimeout(
+                    prepareWAMessageMedia(
+                        getThumbnailImageContent(),
+                        { upload: sock.waUploadToServer }
+                    ),
+                    15_000,
+                    'prepareWAMessageMedia(menuThumbnail)'
+                );
+                headerImageMessage = media.imageMessage;
+            } catch (thumbErr) {
+                log?.warn?.(`[menu] upload thumbnail header: ${thumbErr.message}`);
+            }
+
+            const rows = [
+                { title: '🤖 All Commands',     description: 'View all 2000+ available commands', id: `${P}allmenu`     },
+                { title: '👑 Developer Info',    description: 'AHSAN contact & official details',  id: `${P}owner`       },
+                { title: '🔑 Web Pairing',       description: 'Pair new device or Jadibot',        id: `${P}pair`        },
+                { title: '📢 Official Channel',  description: 'Join official WhatsApp channel',    id: `${P}credits`     },
+                { title: '⚡ Ping & Speed',      description: 'Check bot server response speed',   id: `${P}ping`        },
+                { title: '👮 Admin Menu',        description: 'Group moderation & security tools', id: `${P}menuadmin`   },
+                { title: '🧠 AI Supercharged',   description: 'Smart AI assistant & image tools',  id: `${P}ai`          },
+                { title: '🛠 Tools Menu',        description: 'Converters, generators & tools',    id: `${P}menutools`   },
+                { title: '📥 Downloader Menu',   description: 'TikTok, Instagram, YouTube & more', id: `${P}menumedia`   },
+                { title: '🎮 Fun & Games',       description: 'Fun commands, memes & trivia',      id: `${P}menufun`     },
+                { title: '📢 Broadcast & News',  description: 'Group announcements and broadcasts',id: `${P}bc`          },
+                { title: '🤖 Bot Settings',      description: 'Bot configuration & options',       id: `${P}menubot`     },
+            ];
+
+            const interactiveMessage = proto.Message.InteractiveMessage.create({
+                body: proto.Message.InteractiveMessage.Body.create({
+                    text: `${completeMenuText}\n\n👇 *Use interactive buttons or type commands:*`
+                }),
+                footer: proto.Message.InteractiveMessage.Footer.create({
+                    text: `© ${BOT} • Developed by AHSAN`
+                }),
+                header: headerImageMessage ? proto.Message.InteractiveMessage.Header.create({
+                    hasMediaAttachment: true,
+                    imageMessage: headerImageMessage
+                }) : proto.Message.InteractiveMessage.Header.create({ hasMediaAttachment: false }),
+                nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({
+                    buttons: [
+                        {
+                            name: 'quick_reply',
+                            buttonParamsJson: JSON.stringify({
+                                display_text: '🤖 All Commands (2000+)',
+                                id: `${P}allmenu`
+                            })
+                        },
+                        {
+                            name: 'cta_url',
+                            buttonParamsJson: JSON.stringify({
+                                display_text: '📢 Official Channel',
+                                url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46'
+                            })
+                        },
+                        {
+                            name: 'single_select',
+                            buttonParamsJson: JSON.stringify({
+                                title: `${BOT} Menu`,
+                                sections: [
+                                    { title: 'Quick Actions', rows: rows.slice(0, 4) },
+                                    { title: 'Features & AI', rows: rows.slice(4, 8) },
+                                    { title: 'Tools & RPG', rows: rows.slice(8, 12) },
+                                ]
+                            })
+                        }
+                    ]
+                })
+            });
+
+            const waMsg = generateWAMessageFromContent(jid, {
+                viewOnceMessage: {
+                    message: {
+                        interactiveMessage
+                    }
+                }
+            }, { quoted: msg, userJid: sock.user?.id });
+
+            await sock.relayMessage(jid, waMsg.message, { messageId: waMsg.key.id });
+            markMenuPending(sender);
+            return;
+        } catch (err) {
+            log?.warn?.(`[menu] tombol interaktif gagal, fallback ke teks+gambar: ${err.message}`);
+        }
+    }
+
+    markMenuPending(sender);
+    await sendMenuReply(sock, jid, msg, settings.thumbnailUrl, completeMenuText);
+}
+
+// Versi ringkas dari replyWithImage() (commands/index.js) — sengaja
+// diduplikasi kecil di sini, BUKAN di-import dari commands/index.js,
+// supaya tidak bikin circular import (commands/index.js yang import
+// sendMainMenu dari file ini). Perilakunya sama: kirim gambar dengan
+// caption pendek kalau teksnya kepanjangan buat caption, teks lengkapnya
+// nyusul sebagai pesan terpisah; fallback ke teks polos total kalau
+// kirim gambar gagal.
+const SAFE_CAPTION_LIMIT = 1000;
+async function sendMenuReply(sock, jid, quotedMsg, imageUrl, text) {
+    const full = safeReplyText(text);
+    const tooLongForCaption = full.length > SAFE_CAPTION_LIMIT;
+    const caption = tooLongForCaption
+        ? `${truncate(full, SAFE_CAPTION_LIMIT)}\n\n👇 _Lanjutan di pesan berikutnya..._`
+        : full;
+
+    if (imageUrl) {
+        try {
+            // FIX (2026-08-06): pakai file lokal media/thumbnail.* kalau ada
+            // — lihat lib/thumbnailSource.js. imageUrl tetap jadi penentu mau
+            // kirim gambar atau tidak; isinya diganti ke sumber lokal kalau
+            // persis settings.thumbnailUrl.
+            const imageContent = imageUrl === settings.thumbnailUrl
+                ? getThumbnailImageContent()
+                : { image: { url: imageUrl } };
+            await withTimeout(
+                sock.sendMessage(jid, { ...imageContent, caption }, { quoted: quotedMsg }),
+                30_000,
+                'sendMessage(image)'
+            );
+            if (tooLongForCaption) {
+                await sock.sendMessage(jid, { text: full }, { quoted: quotedMsg });
+            }
+            return;
+        } catch (err) {
+            log?.warn?.(`[menu] gagal kirim gambar thumbnail: ${err.message}`);
+            // lanjut ke fallback teks biasa di bawah
+        }
+    }
+    try {
+        await sock.sendMessage(jid, { text: full }, { quoted: quotedMsg });
+    } catch (err) {
+        log?.error?.(`[menu] gagal kirim teks fallback: ${err.message}`);
+    }
+}
+
+export async function sendRpgMenu(reply) {
+    await reply(
+`╔══════════════════════════════════════╗
+║   ⚡ *${sc('RPG DEACTIVATED — MASTER MD')}*
+╚══════════════════════════════════════╝
+
+⚠️ *RPG system has been deactivated in MASTER MD v3.0.0.*
+All gaming & virtual economy commands were removed to ensure zero-lag performance, eliminate clutter, and preserve 100% server stability.
+
+💡 *Active Feature Suites:*
+• .menuadmin  — Group Moderation, Bans, Warnings & Content Locks
+• .menumedia  — HD Enhancement, Stickers, Filters & Media Tools
+• .menutools  — Converters, Search, Web Utilities & Code Tools
+• .menufun    — Quizzes, Trivia, Interactive Games & Quotes
+• .ai         — Artificial Intelligence Chat & Search
+• .allmenu    — Complete 2000+ Command Directory
+
+👑 *Developer:* AHSAN (03107260507)
+📢 *Official Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46`
+    );
+}
+
+// ─── DYNAMIC FEATURE DESCRIPTIONS (ENGLISH) ──────────────────────────
+const ACTION_DESC = {
+    audit: 'Audits group activities and changes',
+    report: 'Manages user reports and complaints',
+    restore: 'Restores data from backups',
+    backup: 'Backs up data and configurations',
+    delete: 'Deletes data or configuration',
+    remove: 'Removes data or members',
+    schedule: 'Manages automated schedules',
+    protect: 'Activates group protection',
+    add: 'Adds data or members',
+    del: 'Deletes data or configuration',
+
+    info: 'Displays detailed information',
+    status: 'Shows status of features or system',
+    start: 'Starts the selected mode or process',
+    stop: 'Stops active mode or process',
+    create: 'Creates new data or session',
+    open: 'Opens access or session',
+    close: 'Closes active access or session',
+    enter: 'Enters session, area, or activity',
+    leave: 'Leaves session or activity',
+    join: 'Joins session or activity',
+    list: 'Displays list of available data',
+    search: 'Searches data by keyword',
+    find: 'Finds matching records',
+    inspect: 'Inspects object details',
+    scan: 'Scans data for relevant items',
+    track: 'Tracks progress or targets',
+    claim: 'Claims available rewards or loot',
+    complete: 'Completes active tasks or quests',
+    cancel: 'Cancels running activity',
+    accept: 'Accepts requests or invitations',
+    decline: 'Declines requests or invitations',
+    buy: 'Purchases items using balance',
+    sell: 'Sells items for gold or currency',
+    use: 'Uses selected item or tool',
+    equip: 'Equips gear or weapon',
+    unequip: 'Unequips worn gear',
+    upgrade: 'Upgrades level or tier',
+    repair: 'Repairs damaged equipment',
+    craft: 'Crafts new items from ingredients',
+    refine: 'Refines and purifies materials',
+    forge: 'Forges stronger gear versions',
+    cook: 'Cooks dishes from ingredients',
+    feed: 'Feeds character or companion pet',
+    train: 'Trains character to boost stats',
+    heal: 'Heals HP and restores vitality',
+    revive: 'Revives fallen character',
+    attack: 'Strikes target in battle',
+    defend: 'Guards and braces against damage',
+    dodge: 'Attempts to dodge enemy attack',
+    parry: 'Parries and counters enemy attack',
+    cast: 'Casts magical spell or special skill',
+    learn: 'Learns new skill or ability',
+    forget: 'Forgets or removes selected skill',
+    unlock: 'Unlocks locked feature or area',
+    lock: 'Locks feature, area, or access',
+    collect: 'Collects items or pending rewards',
+    deposit: 'Deposits balance or items to storage',
+    withdraw: 'Withdraws balance from bank storage',
+    pay: 'Sends payment using available balance',
+    give: 'Gives item or gift to target',
+    receive: 'Receives items or gifts from users',
+    send: 'Sends data or items to target',
+    invite: 'Invites user to activity or group',
+    kick: 'Kicks target from session or group',
+    promote: 'Promotes target in role system',
+    demote: 'Demotes target in role system',
+    donate: 'Donates gold or items to treasury',
+    build: 'Builds new facility or structure',
+    expand: 'Expands available territory/capacity',
+    travel: 'Travels to another realm or location',
+    return: 'Returns to previous location',
+    teleport: 'Instantly teleports to destination',
+    summon: 'Summons companion or magical entity',
+    dismiss: 'Dismisses summoned entity',
+    sacrifice: 'Sacrifices item for special bonus',
+    trade: 'Trades items with another player',
+    bid: 'Places bid in auction market',
+    sellout: 'Quickly sells eligible inventory items',
+    roll: 'Generates random result with dice roll',
+    spin: 'Spins prize wheel for random outcome',
+    draw: 'Draws random card from deck',
+    choose: 'Selects random option from list',
+    vote: 'Casts vote in active poll',
+    challenge: 'Challenges target to a duel',
+    rank: 'Displays user tier and ranking',
+    score: 'Shows accumulated points or score',
+    top: 'Displays top achieving players',
+    history: 'Shows history of past activities',
+    log: 'Displays system activity logs',
+    save: 'Saves current progress or configuration',
+    load: 'Loads saved data or settings',
+    reset: 'Resets selected data or progress',
+    rename: 'Renames target object or profile',
+    set: 'Sets value or configuration',
+    get: 'Retrieves configuration value',
+    view: 'Views detailed data breakdown',
+    show: 'Displays available results or data',
+    compare: 'Compares two objects or profiles',
+    moderate: 'Applies moderation to target content',
+    protect: 'Activates protection for target',
+    secure: 'Strengthens security for target',
+    configure: 'Adjusts configuration settings',
+    backup: 'Creates data backup',
+    restore: 'Restores data from backup',
+    schedule: 'Schedules automated action',
+    count: 'Counts matching members or records',
+    check: 'Inspects status or condition of target',
+    reload: 'Reloads configuration components',
+    restart: 'Restarts session or component',
+    enable: 'Enables target feature or guard',
+    disable: 'Disables target feature or guard',
+    monitor: 'Monitors target activity and logs',
+    owner: 'Manages owner information & rights',
+    channel: 'Manages official channel details',
+    system: 'Inspects or manages bot system',
+    version: 'Displays current version info',
+    export: 'Exports target data to usable format',
+    import: 'Imports data from provided source',
+    convert: 'Converts data to selected format',
+    encode: 'Encodes data into chosen format',
+    decode: 'Decodes data from encoded format',
+};
+
+const ADMIN_TARGET = {
+    group: 'group', member: 'member', admin: 'admin', link: 'group link',
+    spam: 'spam', toxic: 'toxic language', media: 'media', image: 'image',
+    video: 'video', audio: 'audio', document: 'document', sticker: 'sticker',
+    poll: 'poll', welcome: 'welcome message', farewell: 'farewell message',
+    rules: 'group rules', warning: 'warning system', request: 'join request',
+    event: 'group event', note: 'group notes', template: 'group template',
+    activity: 'group activity', invite: 'group invite', setting: 'group settings',
+    security: 'group security',
+};
+
+function humanizeTarget(target) {
+    return ADMIN_TARGET[target] || target.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/-/g, ' ');
+}
+
+export function getFeatureDescription(name) {
+    const n = String(name || '').toLowerCase();
+    if (!n) return 'Executes bot command.';
+
+    const known = {
+        play: 'Mencari lagu di YouTube lalu mengirim audionya',
+        ytmp3: 'Downloads audio from YouTube link',
+        ytmp4: 'Downloads video from YouTube link',
+        tiktok: 'Downloads watermark-free TikTok video',
+        ig: 'Downloads Instagram posts, reels, and stories',
+        brat: 'Generates Brat-style text image',
+        menu: 'Displays the main interactive bot menu',
+        allmenu: 'Lists all available bot commands',
+        menuadmin: 'Opens group admin and moderation tools',
+        menutools: 'Opens utilities and tools menu',
+        menumedia: 'Opens media processing and downloaders',
+        menufun: 'Opens entertainment and fun commands',
+        menubot: 'Opens bot settings and controls',
+        totalfitur: 'Displays total count of active commands',
+        ping: 'Checks bot response latency and server status',
+        alive: 'Shows live status, developer info, and uptime',
+    };
+    if (known[n]) return known[n];
+
+    if (n.startsWith('admin')) {
+        const rest = n.slice(5);
+        const action = Object.keys(ACTION_DESC).find(a => rest.startsWith(a));
+        const target = action ? rest.slice(action.length) : rest;
+        if (action && target) return `${ACTION_DESC[action]} for ${humanizeTarget(target)}`;
+        if (action) return ACTION_DESC[action];
+        return 'Manages group security and moderation settings';
+    }
+
+    if (n.startsWith('fun')) {
+        const rest = n.slice(3);
+        const action = Object.keys(ACTION_DESC).find(a => rest.startsWith(a));
+        const target = action ? rest.slice(action.length) : rest;
+        if (action && target) return `${ACTION_DESC[action]} for game ${humanizeTarget(target)}`;
+        return action ? ACTION_DESC[action] + ' for entertainment' : 'Interactive games and entertainment';
+    }
+
+    if (n.startsWith('tool')) {
+        const rest = n.slice(4);
+        const action = Object.keys(ACTION_DESC).find(a => rest.startsWith(a));
+        const target = action ? rest.slice(action.length) : rest;
+        if (action && target) return `${ACTION_DESC[action]} on ${humanizeTarget(target)}`;
+        return action ? ACTION_DESC[action] : 'Utility to process or inspect data';
+    }
+
+    if (n.startsWith('media')) {
+        const rest = n.slice(5);
+        const mediaAction = {
+            hd: 'Enhances image resolution and sharpness',
+            crop: 'Crops image or video to selected aspect ratio',
+            rotate: 'Rotates media by selected angle',
+            blur: 'Applies blur effect to media',
+            mirror: 'Horizontally flips media',
+            extractaudio: 'Extracts MP3 audio from video',
+            reverse: 'Plays video backwards in reverse',
+        };
+        if (mediaAction[rest]) return mediaAction[rest];
+        return 'Processes images, video, audio, or stickers';
+    }
+
+    if (n.startsWith('bot')) {
+        const rest = n.slice(3);
+        const action = Object.keys(ACTION_DESC).find(a => rest.startsWith(a));
+        const target = action ? rest.slice(action.length) : rest;
+        if (action && target) return `${ACTION_DESC[action]} for ${humanizeTarget(target)}`;
+        return 'Manages bot system settings and diagnostics';
+    }
+
+    if (n.startsWith('social')) return 'Downloads or processes social media content';
+    if (n.startsWith('cpanel')) return 'Manages server panel accounts and hosting';
+    if (n.startsWith('owner') || n.startsWith('creator')) return 'Developer controls and bot administration';
+    if (n.startsWith('premium')) return 'Premium membership commands and privileges';
+    if (n.startsWith('ai')) return 'Smart AI assistant and image generator tools';
+
+    const specific = {
+        play: 'Searches YouTube and downloads audio instantly',
+        ytmp4: 'Downloads high quality YouTube video',
+        ig: 'Downloads Instagram video, reel, or photo',
+        tiktok: 'Downloads TikTok video without watermark',
+        twitter: 'Downloads video from X / Twitter',
+        facebook: 'Downloads video from Facebook',
+        scdl: 'Downloads music from SoundCloud',
+        pin: 'Downloads media from Pinterest',
+        threads: 'Downloads media from Threads',
+        reddit: 'Downloads video or image from Reddit',
+        quote: 'Generates inspiring or humorous quote',
+        fact: 'Displays random interesting fact',
+        riddle: 'Gives a riddle to solve',
+        truth: 'Provides a Truth question for games',
+        dare: 'Provides a Dare challenge for games',
+        coinflip: 'Flips a coin for Heads or Tails',
+        dice: 'Rolls a virtual dice',
+        rps: 'Plays Rock-Paper-Scissors against the bot',
+        slot: 'Plays virtual slot machine',
+        calc: 'Evaluates mathematical expression',
+        persen: 'Calculates percentages',
+        bmi: 'Calculates Body Mass Index',
+        genpassword: 'Generates secure random password',
+        genuuid: 'Generates new unique UUID',
+        pilih: 'Picks a random item from a given list',
+        shuffle: 'Shuffles list of items randomly',
+        ping: 'Checks bot latency and connection speed',
+        alive: 'Shows live status, developer info, and uptime',
+        owner: 'Displays official developer info (AHSAN)',
+        channel: 'Shares official WhatsApp channel link',
+        sticker: 'Converts image or video to WhatsApp sticker',
+        botstats: 'Displays bot performance and usage statistics',
+        changelog: 'Displays recent bot updates and changelog',
+        credits: 'Displays MASTER MD credits and AHSAN details',
+        support: 'Displays user guide and support assistance',
+        version: 'Displays MASTER MD version and runtime details',
+    };
+    if (specific[n]) return specific[n];
+
+    const verbs = Object.keys(ACTION_DESC).sort((a,b) => b.length - a.length);
+    const verb = verbs.find(v => n === v || n.startsWith(v));
+    if (verb) {
+        const target = n === verb ? '' : n.slice(verb.length);
+        return target
+            ? `${ACTION_DESC[verb]} for ${target.replace(/([a-z])(?=[0-9])/g, '$1 ').replace(/([a-z])([A-Z])/g, '$1 $2')}`
+            : ACTION_DESC[verb];
+    }
+    return 'Executes command based on input arguments';
+}
+
+// ─── ADMIN MENU (ENGLISH) ──────────────────────────────────────────
+export async function sendAdminMenu(reply) {
+    const adminPack = buildRegistryCategoryPack('🛡️ Admin', '🛡️ Admin');
+
+    await reply(
+`╔══════════════════════════════════════╗
+║   🛡️  *${sc('ADMIN & GROUP MANAGEMENT')}*
+╚══════════════════════════════════════╝
+
+╭─「 👥 *${sc('MEMBER MANAGEMENT')}* 」
+│ ${P}kick @tag        — Remove member from group
+│ ${P}promote @tag     — Promote member to admin
+│ ${P}demote @tag      — Demote member from admin
+│ ${P}add [number]     — Add new member to group
+│ ${P}listadmin        — List all group admins
+│ ${P}membercount      — Total member count
+╰──────────────────────────────
+
+╭─「 👑 *${sc('BOT ROLES & PERMISSIONS')}* 」
+│ ${P}cekjabatan [@tag] — Check role (Creator/Owner/Premium)
+│ ${P}addowner @tag    — Grant Owner access _(Creator only)_
+│ ${P}delowner @tag    — Revoke Owner access _(Creator only)_
+│ ${P}listowner        — List Creator & Owners
+│ ${P}addprem @tag     — Grant Premium access _(Owner only)_
+│ ${P}delprem @tag     — Revoke Premium access _(Owner only)_
+│ ${P}listprem         — List all Premium users
+╰──────────────────────────────
+
+╭─「 ⚠️ *${sc('WARNING SYSTEM')}* 」
+│ ${P}warn @tag        — Issue official warning to member
+│ ${P}unwarn @tag      — Remove warning from member
+│ ${P}checkwarn @tag   — Check member warning count
+│ ${P}warnlimit [n]    — Set auto-kick warning limit (default: 3)
+╰──────────────────────────────
+
+╭─「 🔇 *${sc('MUTE & GROUP LOCKS')}* 」
+│ ${P}mute [duration]  — Mute all members (e.g. 10m, 1h)
+│ ${P}unmute           — Unmute group
+│ ${P}mutestatus       — Check mute status
+│ ${P}lockgroup        — Lock group (only admins can chat)
+│ ${P}unlockgroup      — Unlock group
+│ ${P}opengroup        — Open group chat
+│ ${P}closegroup       — Close group chat
+│ ${P}slowmode [sec]   — Enable slow mode
+│ ${P}lockmedia on/off — Lock media messaging
+│ ${P}lockstiker on/off— Lock sticker messaging
+╰──────────────────────────────
+
+╭─「 ⚙️ *${sc('GROUP SETTINGS')}* 」
+│ ${P}groupinfo        — Comprehensive group profile & details
+│ ${P}setname [name]   — Change group subject/name
+│ ${P}setdesc [text]   — Update group description
+│ ${P}link             — Get group invite link
+│ ${P}revoke           — Reset/revoke invite link
+│ ${P}leave            — Command bot to leave group
+│ ${P}hidetag [text]   — Hidden mass mention
+│ ${P}tagall [text]    — Mention all members
+╰──────────────────────────────
+
+╭─「 👋 *${sc('WELCOME & FAREWELL')}* 」
+│ ${P}welcome on/off   — Toggle welcome greeting message
+│ ${P}setwelcome [txt] — Set custom welcome message
+│ ${P}farewell on/off  — Toggle farewell message
+│ ${P}setfarewell [txt]— Set custom farewell message
+│   _Variables: {name} {group} {num}_
+╰──────────────────────────────
+
+╭─「 🛡️ *${sc('SECURITY & PROTECTION')}* 」
+│ ${P}antigb on/off         — Block WA group invite links
+│ ${P}antilink on/off       — Block all external URLs
+│ ${P}antishortlink on/off  — Block link shorteners
+│ ${P}antilinkphising on/off— Block phishing & scam URLs
+│ ${P}antispam on/off       — Block message spamming
+│ ${P}antitoxic on/off      — Block abusive/toxic words
+│ ${P}antijudol on/off      — Block gambling promotions
+│ ${P}antipinjol on/off     — Block illegal loan spam
+│ ${P}anticaps on/off       — Block excessive CAPITAL letters
+│ ${P}antivirtex on/off     — Block virus/zalgo crash texts
+│ ${P}antitag on/off        — Block mass tag spamming
+│ _(Anti-flood activates automatically with antispam)_
+│
+│ ${P}resetprotection   — Disable all protections at once
+│ ${P}antilinkall on/off— Enable all link security filters
+│ ${P}grouplockstatus   — Check status of all security filters
+│ ${P}helpproteksi      — Security filters quick reference
+╰──────────────────────────────
+
+╭─「 🔒 *${sc('CONTENT LOCKS')}* 」
+│ ${P}lockimage on/off    — Restrict images
+│ ${P}lockvideo on/off    — Restrict videos
+│ ${P}lockdocument on/off — Restrict documents
+│ ${P}lockcontact on/off  — Restrict contact cards
+│ ${P}locklocation on/off — Restrict location sharing
+│ ${P}lockvn on/off       — Restrict voice notes
+│ ${P}lockaudio on/off    — Restrict audio files
+│ ${P}lockgif on/off      — Restrict GIFs
+│ ${P}lockpoll on/off     — Restrict poll creation
+╰──────────────────────────────
+
+╭─「 📝 *${sc('WORD FILTER, LINKS & WHITELIST')}* 」
+│ ${P}addbadword [word]  — Add custom forbidden word
+│ ${P}delbadword [word]  — Delete custom forbidden word
+│ ${P}listbadword        — View list of forbidden words
+│ ${P}allowlinkadd [dom] — Whitelist domain from Anti-Link
+│ ${P}allowlinkdel [dom] — Remove domain from whitelist
+│ ${P}allowlinklist      — View whitelisted domains
+│ ${P}whitelistadd @tag  — Whitelist member from filters
+│ ${P}whitelistdel @tag  — Remove member from whitelist
+│ ${P}whitelist          — View whitelisted members
+╰──────────────────────────────
+
+╭─「 📊 *${sc('POLLS, SCHEDULES & REPORTS')}* 」
+│ ${P}poll [q]|[a]|[b] — Create interactive poll
+│ ${P}vote [id] [no]   — Vote on active poll
+│ ${P}hasilpoll [id]   — View poll results
+│ ${P}listpoll         — List active polls
+│ ${P}addjadwal [text] — Add group schedule
+│ ${P}listjadwal       — List all group schedules
+│ ${P}deljadwal [no]   — Delete schedule entry
+│ ${P}lapor [text]     — Send report to admins
+│ ${P}listlaporan      — View member reports
+│ ${P}clearlaporan     — Clear all reports
+│ ${P}aktivitasgrup    — Activity statistics
+╰──────────────────────────────
+
+╭─「 👀 *${sc('INACTIVE MEMBERS (SIDER)')}* 」
+│ ${P}sider [days]     — Check inactive silent members
+│ ${P}kicksider [days] — Kick all inactive members
+│ _Default duration: 3 days. Example: ${P}sider 7d_
+╰──────────────────────────────
+
+╭─「 👥➕ *${sc('ADVANCED MEMBER CONTROLS')}* 」
+│ ${P}kickall yakin    — Kick all non-admin members
+│ ${P}warnall          — Issue warning to all non-admins
+│ ${P}cekwarnall       — List all members with warnings
+│ ${P}topwarn          — Top warned members ranking
+│ ${P}resetwarnall     — Reset all warnings in group
+│ ${P}mutemember @tag  — Mute specific member
+│ ${P}unmutemember @tag— Unmute specific member
+│ ${P}listmutedmember  — List muted members
+╰──────────────────────────────
+
+╭─「 📥 *${sc('JOIN REQUEST APPROVAL')}* 」
+│ ${P}listrequest         — View pending join requests
+│ ${P}approverequest [num]— Approve single join request
+│ ${P}rejectrequest [num] — Reject single join request
+│ ${P}approveall          — Approve all pending requests
+│ ${P}rejectall           — Reject all pending requests
+╰──────────────────────────────
+
+╭─「 ⏰ *${sc('AUTO OPEN/CLOSE TIMERS')}* 」
+│ ${P}jadwalbuka 07:00  — Auto open group daily
+│ ${P}jadwaltutup 22:00 — Auto close group daily
+│ ${P}cekjadwalgrup     — View active schedules
+│ ${P}canceljadwalgrup  — Cancel auto timers
+╰──────────────────────────────
+
+╭─「 ⚡ *${sc('BULK OPS & TASKS')}* 」
+│ ${P}bulkpromote @user1 @user2 ... — Promote multiple members
+│ ${P}bulkdemote @user1 @user2 ...  — Demote multiple members
+│ ${P}bulkkick @user1 @user2 ...    — Kick multiple members
+│ ${P}topactive          — Leaderboard of most active members
+│ ${P}listinactive [d]   — List inactive members
+│ ${P}assigntask @user [task] — Assign task to member
+│ ${P}mytasks            — View your assigned tasks
+│ ${P}listtasks          — List all group tasks
+│ ${P}donetask [no]      — Mark task as completed
+│ ${P}maintenancemode on/off — Toggle maintenance mode
+╰──────────────────────────────
+
+╭─「 🎉 *${sc('EVENTS & ANNOUNCEMENTS')}* 」
+│ ${P}createevent YYYY-MM-DD [text] — Schedule group event
+│ ${P}rsvp [id] yes/no   — RSVP for scheduled event
+│ ${P}listevents         — List upcoming events
+│ ${P}quicklock          — Instant emergency lockdown
+│ ${P}quickunlock        — Lift emergency lockdown
+│ ${P}grouplinkqr        — QR code for group invite link
+│ ${P}previewwelcome     — Preview welcome message
+╰──────────────────────────────${adminPack}`
+    );
+}
+
+// ─── FUN MENU (ENGLISH) ────────────────────────────────────────────
+export async function sendFunMenu(reply) {
+    await reply(
+`╔══════════════════════════════════════╗
+║   🎮  *${sc('FUN & ENTERTAINMENT MENU')}*
+╚══════════════════════════════════════╝
+
+╭─「 🎲 *${sc('CLASSIC GAMES')}* 」
+│ ${P}quote         — Inspiring quotes & wisdom
+│ ${P}fact          — Fascinating facts
+│ ${P}riddle        — Brain-teasing riddles
+│ ${P}truth         — Truth question
+│ ${P}dare          — Dare challenge
+│ ${P}pantun        — Fun rhyming verses
+│ ${P}coinflip      — Toss a coin (Heads/Tails)
+│ ${P}dice [sides]  — Roll dice
+│ ${P}rps [choice]  — Rock, Paper, Scissors
+│ ${P}slot          — Casino slot machine 🎰
+│ ${P}tebakangka    — Guess the number game
+│ ${P}tebak [num]   — Submit number guess
+╰──────────────────────────────
+
+╭─「 💕 *${sc('ROMANCE & SOCIAL')}* 」
+│ ${P}wyr           — Would You Rather?
+│ ${P}jodoh @tag    — Compatibility calculator 💑
+│ ${P}tarot         — Daily tarot card reading
+│ ${P}fortunecookie — Crack open a fortune cookie 🍪
+│ ${P}lovecalc [nm] — Love percentage calculator
+│ ${P}zodiak [date] — Daily horoscope & zodiac
+╰──────────────────────────────
+
+╭─「 🧠 *${sc('MINI GAMES & TRIVIA')}* 」
+│ ${P}trivia            — General knowledge trivia
+│ ${P}jawabtrivia [ans] — Submit trivia answer
+│ ${P}wordscramble      — Word scramble puzzle
+│ ${P}jawabscramble     — Submit scramble answer
+│ ${P}guesshilo         — Higher or Lower game
+│ ${P}tebakgambar       — Picture quiz challenge 🖼️
+╰──────────────────────────────
+
+╭─「 🎉 *${sc('RANDOM FUN & MEMES')}* 」
+│ ${P}dadjoke          — Hilarious dad jokes 😂
+│ ${P}konspirasi       — Funny conspiracy theories
+│ ${P}magic8ball [?]   — Mystic 8-ball answers
+│ ${P}afirmasihariini  — Positive daily affirmation
+│ ${P}angkakeberuntungan — Today's lucky numbers
+│ ${P}emojirandom      — Random emoji combination
+╰──────────────────────────────
+
+╭─「 🎭 *${sc('ROASTS & COMPLIMENTS')}* 」
+│ ${P}roast @tag       — Playful roast 😏
+│ ${P}compliment @tag  — Heartwarming compliment 💐
+│ ${P}pernahkah        — Never Have I Ever
+╰──────────────────────────────
+
+╭─「 ⚡ *${sc('MASTER SPECIALS')}* 」
+│ ${P}master           — Master MD special quote
+│ ${P}hype @tag        — Motivational hype 💪
+│ ${P}power @tag       — Scan power level ⚡
+╰──────────────────────────────${buildRegistryCategoryPack('🎮 Fun', '🎮 Fun')}`
+    );
+}
+
+// ─── TOOLS MENU (ENGLISH) ──────────────────────────────────────────
+export async function sendToolsMenu(reply) {
+    await reply(
+`╔══════════════════════════════════════╗
+║   🛠️  *${sc('TOOLS & UTILITIES MENU')}*
+╚══════════════════════════════════════╝
+
+╭─「 ℹ️ *${sc('BOT INFORMATION')}* 」
+│ ${P}owner   — Developer AHSAN contact & info
+│ ${P}ping    — Check server latency & response speed
+│ ${P}whoami  — View your WhatsApp user ID & metadata
+│ ${P}runtime — Bot system uptime duration
+│ ${P}version — Bot engine version
+╰──────────────────────────────
+
+╭─「 🧠 *${sc('AI & CHATBOT')}* 」
+│ ${P}ai [prompt]     — Chat with MASTER AI
+│ ${P}gpt [prompt]    — Ask GPT assistant
+│ ${P}masterai on/off — Toggle auto AI responder
+╰──────────────────────────────
+
+╭─「 🔤 *${sc('TEXT UTILITIES')}* 」
+│ ${P}uppercase [txt] — UPPERCASE transformation
+│ ${P}lowercase [txt] — lowercase transformation
+│ ${P}reverse [txt]   — Reverse text order
+│ ${P}smallcaps [txt] — Convert to small-caps font
+│ ${P}morse [txt]     — Convert text to Morse code
+│ ${P}binary [txt]    — Convert text to Binary
+│ ${P}base64 [txt]    — Encode text to Base64
+│ ${P}decodebase64    — Decode Base64 string
+│ ${P}wordcount [txt] — Character & word analytics
+╰──────────────────────────────
+
+╭─「 🔢 *${sc('MATH & CALCULATORS')}* 」
+│ ${P}calc [math]     — Scientific calculator
+│ ${P}bmi [w] [h]     — Calculate Body Mass Index
+│ ${P}persen [n]% [x] — Percentage calculator
+│ ${P}discount [p] [d]— Discount & savings calculator
+╰──────────────────────────────
+
+╭─「 🌐 *${sc('WEB, DATA & GENERATORS')}* 」
+│ ${P}qrcode [text]   — Generate custom QR code
+│ ${P}genpassword [n] — Generate secure random password
+│ ${P}shorturl [link] — Shorten long URL
+│ ${P}uuid            — Generate UUID v4
+╰──────────────────────────────
+
+╭─「 📅 *${sc('DATE & TIME')}* 」
+│ ${P}jam             — Current global clock
+│ ${P}age [YYYY-MM-DD]— Age in years, months, seconds
+│ ${P}harilibur       — Upcoming calendar holidays
+╰──────────────────────────────${buildRegistryCategoryPack('🛠️ Tools', '🛠️ Tools')}`
+    );
+}
+
+// ─── MEDIA MENU (ENGLISH) ──────────────────────────────────────────
+export async function sendMediaMenu(reply) {
+    await reply(
+`╔══════════════════════════════════════╗
+║   🖼️  *${sc('MEDIA & DOWNLOADER MENU')}*
+╚══════════════════════════════════════╝
+
+╭─「 🎵 *${sc('YOUTUBE MUSIC')}* 」
+│ ${P}play <query>   — Search & download audio from YouTube
+│ _Example: \`${P}play Alan Walker Faded\`_
+╰──────────────────────────────
+
+╭─「 📥 *${sc('SOCIAL MEDIA DOWNLOADER')}* 」
+│ ${P}ig <link>      — Download Instagram Reels / Posts / Videos
+│ ${P}tiktok <link>  — Download TikTok videos without watermark
+│ _You can also REPLY to any message containing a link!_
+╰──────────────────────────────
+
+╭─「 🎭 *${sc('STICKERS')}* 」
+│ ${P}sticker        — Convert image/video to WhatsApp sticker
+│ _Send/reply media with caption \`${P}sticker\`_
+╰──────────────────────────────
+
+╭─「 📸 *${sc('PROFILE PICTURES')}* 」
+│ ${P}pp [@tag]      — View user profile picture in HD
+│ ${P}ppgrup         — View current group display icon
+╰──────────────────────────────
+
+╭─「 🟢 *${sc('BRAT & IPHONE CHAT')}* 」
+│ ${P}brat <text>        — Brat green aesthetic image maker
+│ \`${P}iqc <text> dark\` — iPhone style chat screenshot maker
+╰──────────────────────────────
+
+╭─「 🆕 *${sc('MORE DOWNLOADERS')}* 」
+│ ${P}threads, reddit, bilibili, dailymotion, vimeo, snackvideo
+│ _Send or reply to supported URL with command_
+╰──────────────────────────────
+
+╭─「 🎛️ *${sc('MEDIA EFFECTS & EDITING')}* 」
+│ ${P}grayscale / mirror / blur — Apply effects to images/videos
+│ ${P}hd                        — Upscale and enhance image resolution
+│ ${P}speedup / slowmo          — Change video speed (2x / 0.5x)
+│ ${P}mutevideo                 — Strip audio from video
+│ ${P}extractaudio              — Extract MP3 audio from video
+│ ${P}volumeup                  — Boost voice note volume 2x
+╰──────────────────────────────${buildRegistryCategoryPack('🖼️ Media', '🖼️ Media')}`
+    );
+}
+
+// ─── BOT MENU (ENGLISH) ────────────────────────────────────────────
+export async function sendBotMenu(reply) {
+    await reply(
+`╔══════════════════════════════════════╗
+║   🤖  *${sc('BOT MENU — SYSTEM & OWNER')}*
+╚══════════════════════════════════════╝
+
+╭─「 📦 *${sc('FEATURE STATS')}* 」
+│ ${P}totalfitur   — Total count of registered commands
+│ ${P}allmenu      — Complete commands index
+╰──────────────────────────────
+
+╭─「 📢 *${sc('BROADCAST (OWNER)')}* 」
+│ ${P}broadcast [msg]     — Broadcast announcement to all groups
+│ ${P}broadcastuser [msg] — Broadcast message to all bot users
+│ ${P}listgrup            — Total groups joined by bot
+╰──────────────────────────────
+
+╭─「 🔄 *${sc('WEB PAIRING & SUB-BOTS')}* 」
+│ ${P}pair [number]    — Generate 8-digit pairing code for device
+│ ${P}stopbot [number] — Disconnect active sub-bot
+│ ${P}listjadibot      — View all active sub-bot connections
+╰──────────────────────────────
+
+╭─「 📊 *${sc('STATISTICS & LOGS')}* 」
+│ ${P}botstats    — Command usage statistics
+│ ${P}changelog   — Bot update history
+│ ${P}suggest [msg] — Send feedback/suggestion to Developer
+│ ${P}listsuggestions — View feedback submissions (Owner)
+╰──────────────────────────────
+
+╭─「 🙏 *${sc('CREDITS & SUPPORT')}* 」
+│ ${P}credits    — Developer AHSAN & technology credits
+│ ${P}support    — Get help & contact developer
+│ ${P}backupnow  — Create manual data backup (Owner)
+│ ${P}version    — View current MASTER MD version
+╰──────────────────────────────${buildRegistryCategoryPack('🤖 Bot', '🤖 Bot')}`
+    );
+}

@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "cleanUrls": true,
+  "functions": {
+    "api/pair.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "api/status.js": {
+      "maxDuration": 30,
+      "memory": 512
+    }
+  }
+}
