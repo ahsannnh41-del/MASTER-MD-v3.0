@@ -767,13 +767,26 @@ ${sc('Fast')} • ${sc('Stable')} • ${sc('Secure')}
                         hasMediaAttachment: true,
                         imageMessage: headerImageMessage
                     })
-                    : proto.Message.InteractiveMessage.Header.create({ hasMediaAttachment: false }),
+                    : proto.Message.InteractiveMessage.Header.create({
+                        title: BOT,
+                        hasMediaAttachment: false
+                    }),
                 nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({ buttons })
             });
 
             const waMessage = generateWAMessageFromContent(
                 jid,
-                { viewOnceMessage: { message: { interactiveMessage } } },
+                {
+                    viewOnceMessage: {
+                        message: {
+                            messageContextInfo: {
+                                deviceListMetadata: {},
+                                deviceListMetadataVersion: 2
+                            },
+                            interactiveMessage
+                        }
+                    }
+                },
                 { userJid: sock.user.id }
             );
 
@@ -784,6 +797,7 @@ ${sc('Fast')} • ${sc('Stable')} • ${sc('Secure')}
             );
             return;
         } catch (err) {
+            console.error(`[menu] NativeFlow buttons FAILED: ${err?.stack || err?.message || err}`);
             log?.warn?.(`[menu] NativeFlow buttons failed: ${err.message} — trying image fallback`);
         }
 
