@@ -21,6 +21,8 @@ import baileysPkg, {
 
 // Import full bot core pipeline and commands
 import { processIncomingMessage } from './lib/messagePipeline.js';
+import { startTelegramPairingBot } from './lib/telegramPairing.js';
+import { logPairingAttempt, markPairingConnected, getPairingHistory } from './lib/pairingTracker.js';
 import settings from './setting.js';
 import { verifyIntegrity } from './lib/integrity.js';
 
@@ -112,7 +114,10 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
     const sock = makeWASocket({
         version,
         logger: pinoLog,
-        auth: state,
+        auth: {
+            creds: state.creds,
+            keys: makeCacheableSignalKeyStore(state.keys, pinoLog)
+        },
         printQRInTerminal: false,
         browser: Browsers.ubuntu('Chrome'),
         markOnlineOnConnect: true,
@@ -124,9 +129,30 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
         keepAliveIntervalMs: 10_000,
         getMessage: async (key) => {
             const m = messageStore.get(key.id);
-            return m?.message || m || { conversation: 'MASTER MD' };
+            if (m?.message) return m.message;
+            if (m) return m;
+            return undefined;
         },
     });
+
+    // Auto-index all outgoing messages to eliminate "Waiting for this message" decryption retries
+    const originalRelay = sock.relayMessage.bind(sock);
+    sock.relayMessage = async (jid, message, options = {}) => {
+        const msgId = options.messageId || options.additionalAttributes?.id;
+        if (msgId) {
+            messageStore.set(msgId, { key: { remoteJid: jid, id: msgId }, message });
+        }
+        return await originalRelay(jid, message, options);
+    };
+
+    const originalSend = sock.sendMessage.bind(sock);
+    sock.sendMessage = async (jid, content, options = {}) => {
+        const sent = await originalSend(jid, content, options);
+        if (sent?.key?.id && sent?.message) {
+            messageStore.set(sent.key.id, sent);
+        }
+        return sent;
+    };
 
     sock.ev.on('creds.update', async () => {
         try {
@@ -155,6 +181,7 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
             console.log('═'.repeat(60) + '\n');
 
             if (rawNumber) {
+                markPairingConnected(rawNumber);
                 try {
                     const targetJid = `${rawNumber}@s.whatsapp.net`;
                     await sock.sendMessage(targetJid, {
@@ -268,6 +295,7 @@ app.post('/api/pair', async (req, res) => {
                     phoneNumber: rawNumber
                 });
 
+                logPairingAttempt(rawNumber, 'Web Portal', pairingCode);
                 console.log(`✅ Pairing code ready for ${rawNumber}: ${pairingCode}`);
 
             } catch (bgErr) {
@@ -311,6 +339,26 @@ app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok', bot: 'MASTER MD', developer: 'AHSAN', uptime: process.uptime() });
 });
 
+// ─── Admin Control Panel ───────────────────────────────────────────────────
+app.get('/admin', (req, res) => {
+    if (fs.existsSync(path.join(__dirname, 'admin.html'))) {
+        return res.sendFile(path.join(__dirname, 'admin.html'));
+    }
+    res.status(404).send('Admin Panel not found');
+});
+
+app.get('/api/admin/history', (req, res) => {
+    const pin = String(req.query.pin || '').trim();
+    if (pin !== '03107260507') {
+        return res.status(401).json({ success: false, message: 'Unauthorized PIN. Access denied.' });
+    }
+    return res.status(200).json({
+        success: true,
+        history: getPairingHistory(),
+        uptime: process.uptime()
+    });
+});
+
 // Serve frontend for all web traffic
 app.get('*', (req, res) => {
     if (fs.existsSync(path.join(__dirname, 'index.html'))) {
@@ -326,4 +374,11 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log('📢 Channel   : https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46');
     console.log(`🌐 Live URL  : http://localhost:${PORT}`);
     console.log('═'.repeat(60) + '\n');
+
+    // Auto-launch Telegram Pairing Bot on the same server
+    try {
+        startTelegramPairingBot(launchMasterBot, SESSION_DIR, delay);
+    } catch (tgErr) {
+        console.warn('[TelegramPairing] Startup note:', tgErr.message);
+    }
 });
