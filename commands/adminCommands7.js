@@ -1,11 +1,12 @@
 // ═══════════════════════════════════════════════════════════════════
-//  ADMINCOMMANDS7.JS — Batch admin baru #3: Event RSVP, Quick Lock
+//  ADMINCOMMANDS7.JS — Group Events & Emergency Quick Lock
+//  Developer: AHSAN (03107260507)
 // ═══════════════════════════════════════════════════════════════════
 
 import { store, save, getGroupSettings, updateGroupSettings } from '../lib/db.js';
 
 function requireAdmin(ctx) {
-    if (!ctx.isAdmin) { ctx.reply('❌ Khusus Admin grup.'); return false; }
+    if (!ctx.isAdmin) { ctx.reply('❌ Group Admins only.'); return false; }
     return true;
 }
 
@@ -17,9 +18,9 @@ function eventStore() { return store('groupEvents', {}); }
 export async function eventCreate(ctx) {
     if (!requireAdmin(ctx)) return;
     const match = ctx.body.match(/(\d{4}-\d{2}-\d{2})\s+([\s\S]+)/);
-    if (!match) return ctx.reply('⚠️ Cara pakai: `.createevent 2026-08-17 Nonton bareng 17an`');
+    if (!match) return ctx.reply('⚠️ Usage: `.createevent 2026-12-25 Christmas Group Meetup`');
     const [, dateStr, text] = match;
-    if (isNaN(new Date(dateStr))) return ctx.reply('❌ Format tanggal salah, pakai YYYY-MM-DD.');
+    if (isNaN(new Date(dateStr))) return ctx.reply('❌ Invalid date format, please use YYYY-MM-DD.');
 
     const list = eventStore()[ctx.jid] || [];
     const event = { id: list.length + 1, date: dateStr, text: text.trim(), yes: [], no: [], createdBy: ctx.sender };
@@ -27,31 +28,34 @@ export async function eventCreate(ctx) {
     const data = eventStore();
     data[ctx.jid] = list;
     save('groupEvents');
-    return ctx.reply(`✅ *Event #${event.id} dibuat!*\n\n📅 ${dateStr}\n📝 ${text.trim()}\n\nMember bisa konfirmasi lewat \`.rsvp ${event.id} ya\` atau \`.rsvp ${event.id} tidak\``);
+    return ctx.reply(`✅ *Event #${event.id} created!*\n\n📅 ${dateStr}\n📝 ${text.trim()}\n\nMembers can RSVP with \`.rsvp ${event.id} yes\` or \`.rsvp ${event.id} no\``);
 }
 
 export async function eventRsvp(ctx) {
     const [id, answer] = ctx.args;
     const eventId = parseInt(id, 10);
-    if (!eventId || !['ya', 'tidak'].includes((answer || '').toLowerCase())) {
-        return ctx.reply('⚠️ Cara pakai: `.rsvp [id_event] ya` atau `.rsvp [id_event] tidak`\nLihat event: `.listevents`');
+    const ans = (answer || '').toLowerCase();
+    const isYes = ans === 'yes' || ans === 'ya';
+    const isNo = ans === 'no' || ans === 'tidak';
+    if (!eventId || (!isYes && !isNo)) {
+        return ctx.reply('⚠️ Usage: `.rsvp [event_id] yes` or `.rsvp [event_id] no`\nView events: `.listevents`');
     }
     const list = eventStore()[ctx.jid] || [];
     const event = list.find(e => e.id === eventId);
-    if (!event) return ctx.reply('❌ Event dengan ID itu tidak ditemukan.');
+    if (!event) return ctx.reply('❌ Event with that ID was not found.');
 
     event.yes = event.yes.filter(j => j !== ctx.sender);
     event.no = event.no.filter(j => j !== ctx.sender);
-    (answer.toLowerCase() === 'ya' ? event.yes : event.no).push(ctx.sender);
+    (isYes ? event.yes : event.no).push(ctx.sender);
     save('groupEvents');
-    return ctx.reply(`✅ Konfirmasi kamu untuk event #${eventId} tercatat: *${answer.toUpperCase()}*\n\n👍 ${event.yes.length} akan hadir | 👎 ${event.no.length} tidak hadir`);
+    return ctx.reply(`✅ Your RSVP for event #${eventId} recorded: *${isYes ? 'ATTENDING' : 'NOT ATTENDING'}*\n\n👍 ${event.yes.length} Attending | 👎 ${event.no.length} Not Attending`);
 }
 
 export async function eventList(ctx) {
     const list = (eventStore()[ctx.jid] || []).filter(e => new Date(e.date) >= new Date(new Date().toDateString()));
-    if (!list.length) return ctx.reply('ℹ️ Belum ada event mendatang di grup ini.');
-    let txt = `📅 *EVENT MENDATANG*\n\n`;
-    list.forEach(e => { txt += `#${e.id} — ${e.date}\n${e.text}\n👍 ${e.yes.length} | 👎 ${e.no.length}\n\n`; });
+    if (!list.length) return ctx.reply('ℹ️ No upcoming events in this group.');
+    let txt = `📅 *UPCOMING EVENTS*\n\n`;
+    list.forEach(e => { txt += `#${e.id} — ${e.date}\n${e.text}\n👍 ${e.yes.length} Attending | 👎 ${e.no.length} Not Attending\n\n`; });
     return ctx.reply(txt.trim());
 }
 
@@ -59,17 +63,16 @@ export async function eventAttendees(ctx) {
     const id = parseInt(ctx.args[0], 10);
     const list = eventStore()[ctx.jid] || [];
     const event = list.find(e => e.id === id);
-    if (!event) return ctx.reply('⚠️ Cara pakai: `.eventattendees [id]`');
-    let txt = `👥 *KONFIRMASI EVENT #${id}*\n${event.text}\n\n`;
-    txt += `👍 *Hadir (${event.yes.length}):*\n${event.yes.map(j => `\`${j.split('@')[0]}\``).join(', ') || '-'}\n\n`;
-    txt += `👎 *Tidak hadir (${event.no.length}):*\n${event.no.map(j => `\`${j.split('@')[0]}\``).join(', ') || '-'}`;
+    if (!event) return ctx.reply('⚠️ Usage: `.eventattendees [id]`');
+    let txt = `👥 *EVENT ATTENDEES #${id}*\n${event.text}\n\n`;
+    txt += `👍 *Attending (${event.yes.length}):*\n${event.yes.map(j => `\`${j.split('@')[0]}\``).join(', ') || 'None'}\n\n`;
+    txt += `👎 *Not Attending (${event.no.length}):*\n${event.no.map(j => `\`${j.split('@')[0]}\``).join(', ') || 'None'}`;
     return ctx.reply(txt);
 }
 
-// ═══════════════════════════════════════════════════════════════════
-//  QUICK LOCK — nyalakan/matikan beberapa proteksi umum sekaligus
-//  ("mode darurat" saat grup lagi diserang spam/link/dsb)
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+//  QUICK LOCK (EMERGENCY RAID DEFENSE)
+// ═══════════════════════════════════════════════════════════════
 const QUICK_LOCK_KEYS = ['antilink', 'antispam', 'antitag'];
 
 export async function quickLock(ctx) {
@@ -78,7 +81,7 @@ export async function quickLock(ctx) {
     QUICK_LOCK_KEYS.forEach(k => { patch[k] = true; });
     updateGroupSettings(ctx.jid, patch);
     try { await ctx.sock.groupSettingUpdate(ctx.jid, 'announcement'); } catch {}
-    return ctx.reply('🔒 *Quick Lock aktif!*\n\nAnti-link, Anti-spam, Anti-tag diaktifkan, dan grup dikunci (cuma admin yang bisa chat).\nMatikan lagi lewat `.quickunlock` kalau situasi sudah aman.');
+    return ctx.reply('🔒 *Quick Lock Activated!*\n\nAnti-Link, Anti-Spam, and Anti-Tag shields are active, and group is locked to Admins Only.\nDisable with `.quickunlock` when safe.');
 }
 
 export async function quickUnlock(ctx) {
@@ -87,5 +90,5 @@ export async function quickUnlock(ctx) {
     QUICK_LOCK_KEYS.forEach(k => { patch[k] = false; });
     updateGroupSettings(ctx.jid, patch);
     try { await ctx.sock.groupSettingUpdate(ctx.jid, 'not_announcement'); } catch {}
-    return ctx.reply('🔓 *Quick Lock dinonaktifkan.*\n\nSemua proteksi yang diaktifkan lewat `.quicklock` sudah dimatikan, dan grup dibuka lagi untuk semua member.');
+    return ctx.reply('🔓 *Quick Lock Deactivated.*\n\nEmergency raid protection disabled and chat reopened for all members.');
 }

@@ -90,23 +90,19 @@ async function searchVideo(binPath, query) {
 async function play(reply, sock, jid, msg, args) {
     if (!args || args.length === 0) {
         return reply(
-`🎵 *CARA PAKAI .play*
+`🎵 *HOW TO USE .play*
 
-Ketik judul lagu atau artis:
-➜ \`.play Naruto opening\`
-➜ \`.play Yoasobi Idol\`
+Type a song title or artist:
+➜ \`.play Starboy The Weeknd\`
 ➜ \`.play Alan Walker Faded\`
+➜ \`.play Shape of You\`
 
-Bot akan cari di YouTube lalu kirim audionya langsung!`
+The bot will search YouTube and send the audio directly!`
         );
     }
 
     const query = args.join(' ');
 
-    // 0. Coba REST API Nauval terlebih dahulu. Endpoint dicari dari OpenAPI
-    // API itu sendiri, jadi tidak mengunci bot ke path yang bisa berubah.
-    // API key bersifat opsional; bila server API menerima akses gratis berbasis
-    // IP, bot tetap bisa mencoba tanpa key. Jika gagal, fallback ke yt-dlp.
     try {
         const apiResult = await nauvalPlay(query);
         if (apiResult?.buffer?.length) {
@@ -133,12 +129,10 @@ Bot akan cari di YouTube lalu kirim audionya langsung!`
                         return;
                     }
                 }
-            } catch { /* fallback ke yt-dlp */ }
+            } catch { /* fallback */ }
         }
-    } catch { /* API gagal/tidak tersedia → fallback ke yt-dlp */ }
+    } catch { /* fallback */ }
 
-    // 0. Siapkan binary yt-dlp (download sekali kalau belum ada — bisa
-    //    makan waktu beberapa detik di pemanggilan PERTAMA saja).
     let binPath;
     try {
         binPath = await ensureYtDlp();
@@ -146,51 +140,43 @@ Bot akan cari di YouTube lalu kirim audionya langsung!`
         return reply(`❌ ${err.message}`);
     }
 
-    // 1. Beritahu user sedang mencari
-    await reply(`🔍 Mencari *"${query}"* di YouTube...`);
+    await reply(`🔍 Searching *"${query}"* on YouTube...`);
 
     let video;
     try {
         video = await searchVideo(binPath, query);
-        if (!video) return reply('❌ Tidak ada hasil ditemukan. Coba kata kunci lain.');
+        if (!video) return reply('❌ No results found. Please try another search term.');
     } catch (err) {
-        return reply(`❌ Gagal mencari lagu: ${err.message}`);
+        return reply(`❌ Failed to search song: ${err.message}`);
     }
 
-    // 2. Cek durasi — batasi 10 menit supaya tidak timeout / file terlalu besar
     const MAX_DURATION_SEC = 600;
     if (video.seconds > MAX_DURATION_SEC) {
         return reply(
-`⚠️ Durasi lagu terlalu panjang!
+`⚠️ Song duration too long!
 
 🎵 *${video.title}*
-⏱️ Durasi: ${fmtDur(video.seconds)} (maks. 10 menit)
+⏱️ Duration: ${fmtDur(video.seconds)} (maximum 10 minutes)
 
-Coba cari lagu yang lebih pendek ya.`
+Please choose a shorter track.`
         );
     }
 
-    // 3. Beritahu user sedang download
     await reply(
-`🎵 *Ditemukan!*
+`🎵 *Track Found!*
 
 📌 *${video.title}*
-👤 ${video.author}
-⏱️ ${fmtDur(video.seconds)}
+👤 Channel: ${video.author}
+⏱️ Duration: ${fmtDur(video.seconds)}
 👁️ ${fmtViews(video.views)} views
 
-⬇️ Mengunduh audio...`
+⬇️ Downloading audio...`
     );
 
-    // 4. Download + konversi ke MP3 di file sementara.
-    // Jangan lagi mengirim bestaudio mentah ke stdout: stream YouTube bisa
-    // berupa WebM/Opus dan WhatsApp kadang menolaknya sebagai audio.
-    // ffmpeg-static dibundel di project sehingga tidak bergantung pada
-    // ffmpeg sistem Pterodactyl.
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gojo-play-'));
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'master-play-'));
     const outFile = path.join(tmpDir, 'audio.mp3');
     try {
-        if (!FFMPEG_PATH) throw new Error('FFmpeg tidak tersedia di paket bot.');
+        if (!FFMPEG_PATH) throw new Error('FFmpeg binary unavailable.');
         await runYtDlp(binPath, [
             video.url,
             '-f', 'bestaudio/best',
@@ -203,9 +189,8 @@ Coba cari lagu yang lebih pendek ya.`
             '-o', outFile,
         ], { timeoutMs: 180_000 });
         const stat = fs.statSync(outFile);
-        if (!stat.isFile() || stat.size === 0) throw new Error('File audio hasil download kosong.');
-        // Batas aman praktis untuk pengiriman audio.
-        if (stat.size > 15 * 1024 * 1024) throw new Error('File audio terlalu besar untuk dikirim.');
+        if (!stat.isFile() || stat.size === 0) throw new Error('Downloaded audio file is empty.');
+        if (stat.size > 15 * 1024 * 1024) throw new Error('Audio file exceeds size limit (15MB).');
 
         const audioBuffer = fs.readFileSync(outFile);
         try {
@@ -216,12 +201,14 @@ Coba cari lagu yang lebih pendek ya.`
                 ptt: false,
             }, { quoted: msg });
         } catch (err) {
-            return reply(`❌ Gagal mengirim audio: ${err.message || 'pengiriman gagal'}`);
+            return reply(`❌ Failed to send audio: ${err.message || 'Transmission error'}`);
         }
     } catch (err) {
         return reply(
-`❌ Gagal mengunduh audio.
-${String(err.message || 'Downloader gagal').replace(/\s+/g, ' ').slice(0, 300)}
+`❌ Failed to download audio.
+${String(err.message || 'Download error').replace(/\s+/g, ' ').slice(0, 300)}`
+        );
+    }
 
 Coba judul/lagu lain.`
         );

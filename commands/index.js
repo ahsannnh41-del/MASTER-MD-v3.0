@@ -38,7 +38,7 @@ import {
     grayscaleCmd, mirrorCmd, blurCmd, rotate90Cmd, rotate180Cmd,
     speedUpCmd, slowMoCmd, muteVideoCmd, extractAudioCmd, volumeUpCmd,
     sepiaCmd, invertCmd, pixelateCmd, brightenCmd, darkenCmd, reverseVideoCmd,
-    flipVerticalCmd, squareCropCmd, watermarkCmd, hdCmd,
+    flipVerticalCmd, squareCropCmd, watermarkCmd, hdCmd, handleViewOnce,
 } from './mediaCommands2.js';
 import {
     trackCommandUsage, botStats, showChangelog,
@@ -115,7 +115,7 @@ function saveBotCfg() { save('botConfig'); }
 })();
 import { log } from '../lib/logger.js';
 import { getThumbnailImageContent } from '../lib/thumbnailSource.js';
-import { sendMainMenu, sendAdminMenu, sendFunMenu, sendToolsMenu, sendMediaMenu, sendBotMenu, sendRpgMenu, sc, getFeatureDescription } from './menu.js';
+import { sendMainMenu, sendAdminMenu, sendFunMenu, sendToolsMenu, sendMediaMenu, sendBotMenu, sendRpgMenu, sendOwnerMenu, sendAiMenu, sc, getFeatureDescription } from './menu.js';
 import settings from '../setting.js';
 import { parseDaftarInput, register, getProfile, isRegistered } from '../lib/registry.js';
 
@@ -247,11 +247,18 @@ reg(['menu', 'help', 'start'], async (ctx) => sendMainMenu(ctx.reply, ctx.sender
 // (Handler .allmenu didaftarkan di bawah, setelah routeMap tersedia —
 //  lihat dekat definisi getAllCommandNames())
 reg(['menurpg', 'rpgmenu', 'menugame'], async (ctx) => sendRpgMenu(ctx.reply));
-reg(['menuadmin', 'adminmenu'], async (ctx) => sendAdminMenu(ctx.reply));
+reg(['menuadmin', 'adminmenu', 'menugroup', 'groupmenu'], async (ctx) => sendAdminMenu(ctx.reply));
 reg(['menufun', 'funmenu'], async (ctx) => sendFunMenu(ctx.reply));
 reg(['menutools', 'toolsmenu'], async (ctx) => sendToolsMenu(ctx.reply));
 reg(['menumedia', 'mediamenu'], async (ctx) => sendMediaMenu(ctx.reply));
 reg(['menubot', 'botmenu'], async (ctx) => sendBotMenu(ctx.reply));
+reg(['menuowner', 'ownermenu'], async (ctx) => sendOwnerMenu(ctx.reply));
+reg(['menuai', 'aimenu'], async (ctx) => sendAiMenu(ctx.reply));
+
+// ─── VIEW-ONCE RETRIEVER (.vv / .rvo / .readviewonce) ────────────────────────
+reg(['vv', 'rvo', 'readviewonce', 'viewonce', 'antiviewonce'], async (ctx) => {
+    await handleViewOnce(ctx);
+});
 
 // .totalfitur — tampilkan jumlah total command/fitur yang terdaftar di
 // bot ini. Pakai getRegisteredCommandCount() (didefinisikan di bawah,
@@ -689,18 +696,18 @@ reg(['listowner', 'daftarowner', 'cekowner'], async (ctx) => {
     const owners = listOwners();
     const lines = [`👑 *Creator*: ${creator.name} (+${creator.number})`];
     if (owners.length === 0) {
-        lines.push('', '⭐ *Owner*: _(belum ada Owner tambahan)_');
+        lines.push('', '⭐ *Owner*: _(No additional Owners registered)_');
     } else {
-        lines.push('', '⭐ *Daftar Owner:*');
+        lines.push('', '⭐ *Owner List:*');
         owners.forEach((o, i) => lines.push(`${i + 1}. +${o.number} _(${o.source})_`));
     }
-    lines.push('', `_${settings.prefix}addowner @tag — tambah Owner (Owner/Creator)_`);
+    lines.push('', `_${settings.prefix}addowner @tag — add Owner (Owner/Creator)_`);
     await ctx.reply(lines.join('\n'));
 });
 reg(['addowner'], async (ctx) => {
     if (!ctx.isOwner) return ctx.reply('❌ Only *Owner* or *Creator* can add an Owner.');
     const target = ctx.mentioned?.[0] || (ctx.args?.[0] ? `${ctx.args[0].replace(/[^0-9]/g, '')}@s.whatsapp.net` : null);
-    if (!target) return ctx.reply(`📌 Usage: *${settings.prefix}addowner @tag* atau *${settings.prefix}addowner 628xxx*`);
+    if (!target) return ctx.reply(`📌 Usage: *${settings.prefix}addowner @tag* or *${settings.prefix}addowner 923xxx*`);
     const result = addOwner(target);
     if (!result.ok) return ctx.reply(`❌ ${result.reason}`);
     await ctx.reply(`✅ @${target.split('@')[0]} has been successfully promoted to *Owner*.`);
@@ -708,21 +715,21 @@ reg(['addowner'], async (ctx) => {
 reg(['delowner', 'removeowner'], async (ctx) => {
     if (!ctx.isCreator) return ctx.reply('❌ Only *Creator* can remove an Owner.');
     const target = ctx.mentioned?.[0] || (ctx.args?.[0] ? `${ctx.args[0].replace(/[^0-9]/g, '')}@s.whatsapp.net` : null);
-    if (!target) return ctx.reply(`📌 Usage: *${settings.prefix}delowner @tag* atau *${settings.prefix}delowner 628xxx*`);
+    if (!target) return ctx.reply(`📌 Usage: *${settings.prefix}delowner @tag* or *${settings.prefix}delowner 923xxx*`);
     const result = removeOwner(target);
     if (!result.ok) return ctx.reply(`❌ ${result.reason}`);
-    await ctx.reply(`✅ @${target.split('@')[0]} sudah dicabut dari jabatan *Owner*.`);
+    await ctx.reply(`✅ @${target.split('@')[0]} has been removed from *Owner*.`);
 });
 reg(['listprem', 'listpremium', 'daftarpremium'], async (ctx) => {
     const premiums = listPremium();
     const lines = [];
     if (premiums.length === 0) {
-        lines.push('💎 *Daftar Premium*', '', '_(belum ada user Premium)_');
+        lines.push('💎 *Premium Users List*', '', '_(No Premium users registered)_');
     } else {
-        lines.push(`💎 *Daftar Premium* (${premiums.length})`, '');
+        lines.push(`💎 *Premium Users List* (${premiums.length})`, '');
         premiums.forEach((p, i) => lines.push(`${i + 1}. +${p.number} _(${p.source})_`));
     }
-    lines.push('', `_${settings.prefix}addprem @tag — tambah Premium (Owner only)_`);
+    lines.push('', `_${settings.prefix}addprem @tag — add Premium (Owner only)_`);
     await ctx.reply(lines.join('\n'));
 });
 reg(['addprem', 'addpremium'], async (ctx) => {
@@ -770,7 +777,7 @@ reg(['infocreator'], async (ctx) => {
         lines.push(``, `🌟 *Co-Creator (${coList.length})*`);
         coList.forEach((c, i) => lines.push(`┗ ${i+1}. +${c.number}`));
     } else {
-        lines.push(``, `_Belum ada Co-Creator._`);
+        lines.push(``, `_No Co-Creators registered._`);
     }
     await ctx.reply(lines.join('\n'));
 });
@@ -778,7 +785,7 @@ reg(['infocreator'], async (ctx) => {
 reg(['addcreator'], async (ctx) => {
     if (!ctx.isCreator) return ctx.reply('❌ Only *Primary Creator* can add Co-Creators.');
     const target = ctx.mentioned?.[0] || (ctx.args?.[0] ? `${ctx.args[0].replace(/[^0-9]/g,'')}@s.whatsapp.net` : null);
-    if (!target) return ctx.reply(`📌 Usage: *${settings.prefix}addcreator @tag* atau *${settings.prefix}addcreator 628xxx*`);
+    if (!target) return ctx.reply(`📌 Usage: *${settings.prefix}addcreator @tag* or *${settings.prefix}addcreator 923xxx*`);
     const result = addCoCreator(target, ctx.sender);
     if (!result.ok) return ctx.reply(`❌ ${result.reason}`);
     await ctx.reply(`✅ @${target.split('@')[0]} has been promoted to *Co-Creator*! 🌟`);
@@ -790,15 +797,15 @@ reg(['delcreator', 'removecreator'], async (ctx) => {
     if (!target) return ctx.reply(`📌 Usage: *${settings.prefix}delcreator @tag*`);
     const result = removeCoCreator(target, ctx.sender);
     if (!result.ok) return ctx.reply(`❌ ${result.reason}`);
-    await ctx.reply(`✅ @${target.split('@')[0]} sudah dicabut dari jabatan *Co-Creator*.`);
+    await ctx.reply(`✅ @${target.split('@')[0]} has been removed from *Co-Creator*.`);
 });
 
 reg(['listcreator', 'daftarcreator'], async (ctx) => {
     const coList = listCoCreators();
     const info   = getCreatorInfo();
-    const lines  = [`🌟 *Daftar Creator*`, ``, `👑 Primary: +${info.number} _(${info.name})_`];
+    const lines  = [`🌟 *Creators List*`, ``, `👑 Primary: +${info.number} _(${info.name})_`];
     if (coList.length === 0) {
-        lines.push('', '_Belum ada Co-Creator._');
+        lines.push('', '_No Co-Creators registered._');
     } else {
         lines.push('', `🌟 Co-Creator (${coList.length}):`);
         coList.forEach((c, i) => lines.push(`${i+1}. +${c.number}`));
@@ -1427,24 +1434,24 @@ reg(['regextest'], async (ctx) => toolsCommands4.regexTest(ctx.reply, ctx.args))
 // eksternal), jadi didaftarkan inline di sini, bukan lewat toolsCommands4.js
 reg(['qrcode', 'qr'], async (ctx) => {
     const text = ctx.args.join(' ').trim();
-    if (!text) return ctx.reply('📌 Usage: *.qrcode [teks/link]*');
+    if (!text) return ctx.reply('📌 Usage: *.qrcode [text/link]*');
     const url = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(text)}`;
     try {
-        await ctx.sock.sendMessage(ctx.jid, { image: { url }, caption: `📱 QR Code untuk:\n${text.slice(0, 100)}` }, { quoted: ctx.msg });
+        await ctx.sock.sendMessage(ctx.jid, { image: { url }, caption: `📱 QR Code for:\n${text.slice(0, 100)}` }, { quoted: ctx.msg });
     } catch (err) {
-        await ctx.reply(`❌ Gagal membuat QR code: ${err.message}`);
+        await ctx.reply(`❌ Failed to create QR code: ${err.message}`);
     }
 });
 reg(['shorturl', 'pendekkanlink'], async (ctx) => {
     const link = ctx.args[0];
-    if (!link || !/^https?:\/\//i.test(link)) return ctx.reply('📌 Usage: *.shorturl [link lengkap dengan http/https]*');
+    if (!link || !/^https?:\/\//i.test(link)) return ctx.reply('📌 Usage: *.shorturl [full link with http/https]*');
     try {
         const res = await fetch(`https://is.gd/create.php?format=simple&url=${encodeURIComponent(link)}`);
         const short = await res.text();
         if (!short.startsWith('http')) throw new Error(short);
-        await ctx.reply(`🔗 *Link Pendek*\n\n${short}`);
+        await ctx.reply(`🔗 *Shortened Link*\n\n${short}`);
     } catch (err) {
-        await ctx.reply(`❌ Gagal memendekkan link: ${err.message}`);
+        await ctx.reply(`❌ Failed to shorten link: ${err.message}`);
     }
 });
 
@@ -1632,12 +1639,12 @@ reg(['grouplinkqr'], async (ctx) => {
         const code = await ctx.sock.groupInviteCode(ctx.jid);
         const link = `https://chat.whatsapp.com/${code}`;
         const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(link)}`;
-        await ctx.sock.sendMessage(ctx.jid, { image: { url: qrUrl }, caption: `🔗 QR Code link grup ini:\n${link}` }, { quoted: ctx.msg });
+        await ctx.sock.sendMessage(ctx.jid, { image: { url: qrUrl }, caption: `🔗 QR Code for group link:\n${link}` }, { quoted: ctx.msg });
     } catch (err) {
-        await ctx.reply(`❌ Gagal buat QR: ${err.message}`);
+        await ctx.reply(`❌ Failed to generate QR code: ${err.message}`);
     }
 });
-reg(['version', 'versibot'], async (ctx) => ctx.reply(`🤖 *${settings.botName}*\nVersi: *v${settings.botVersion}*`));
+reg(['version', 'versibot'], async (ctx) => ctx.reply(`🤖 *${settings.botName}*\nVersion: *v${settings.botVersion}*`));
 
 // ─── TOOLS BATCH #5 (commands/toolsCommands8.js) ───────────────────────────
 reg(['removepunctuation'], async (ctx) => toolsCommands8.removePunctuation(ctx.reply, ctx.args));
@@ -1672,7 +1679,7 @@ reg(['hashtaggen'], async (ctx) => toolsCommands9.hashtagGenerate(ctx.reply, ctx
 // ─── ADMIN — preview pesan welcome tanpa perlu member baru join ────────────
 reg(['previewwelcome'], async (ctx) => {
     const gs = getGroupSettings(ctx.jid);
-    if (!gs.welcomeText) return ctx.reply('ℹ️ Belum ada pesan welcome yang diatur.\nSet dulu lewat `.setwelcome [teks]`.');
+    if (!gs.welcomeText) return ctx.reply('ℹ️ No custom welcome message configured.\nSet one using `.setwelcome [text]`.');
     const previewNum = ctx.sender.split('@')[0];
     // FIX (rebranding V2): sebelumnya {group} di-preview pakai JID mentah
     // (mis. "1234567890-xxxx@g.us"), padahal pesan welcome ASLI (di
@@ -3953,12 +3960,179 @@ function getMenuKnowledgeBase() {
 }
 
 reg(['allmenu'], async (ctx) => {
+    const isFull = ctx.args && (ctx.args[0] === 'full' || ctx.args[0] === 'all' || ctx.args[0] === 'raw');
     const names = getAllCommandNames().filter(n => {
         const lower = String(n).toLowerCase();
         return !['gamble','lottery','bettinggold'].includes(lower) && !lower.startsWith('rpg');
     });
     const prefix = settings.prefix || '.';
     const now = Date.now();
+
+    if (!isFull) {
+        const categoryDashboard =
+`╔══════════════════════════════════════╗
+║   ⚡ *${settings.botName} v${settings.botVersion}* ⚡
+║       👑 DEVELOPER: AHSAN
+╚══════════════════════════════════════╝
+
+_${settings.botTagline || '⚡ Next-Gen WhatsApp Multi-Device Powerhouse by AHSAN ⚡'}_
+_"Interactive Command Category Suite Dashboard"_
+✦ ⋆ ✧ ⋆ ✦ ⋆ ✧ ⋆ ✦ ⋆ ✧ ⋆ ✦
+
+┏ 🕒 *Time*     : ${fmtTime(now)}
+┃ 📅 *Date*     : ${fmtDate(now)}
+┗ ⚡ *Prefix*   : \`${prefix}\`
+
+┏ 🟢 *Status*   : Online & Active
+┃ 📊 *Total*    : *${names.length}* Commands
+┗ 📚 *Suites*   : *9 Specialized Categories*
+
+╭─〔 📋 *COMMAND CATEGORY SUITES* 〕
+│
+│ 🛡️ *1. GROUP & ADMIN SUITE*
+│ ↳ Type \`${prefix}menuadmin\` or \`${prefix}menugroup\`
+│   _Kick, warn, mute, anti-link, anti-delete, pins, polls, approvals_
+│
+│ 👑 *2. OWNER & CREATOR SUITE*
+│ ↳ Type \`${prefix}menuowner\`
+│   _Broadcast, set bot, add premium, add owner, restart, eval, terminal_
+│
+│ 🛠️ *3. TOOLS & UTILITY SUITE*
+│ ↳ Type \`${prefix}menutools\`
+│   _Converters, calculator, web search, tinyurl, QR, sticker tools_
+│
+│ 📥 *4. MEDIA & DOWNLOADER SUITE*
+│ ↳ Type \`${prefix}menumedia\`
+│   _TikTok, YouTube, Instagram, Facebook, View-Once retriever (.vv)_
+│
+│ 🧠 *5. ARTIFICIAL INTELLIGENCE SUITE*
+│ ↳ Type \`${prefix}menuai\` or \`${prefix}ai\`
+│   _GPT smart chat, code generator, summary, translations_
+│
+│ 🎮 *6. FUN & ENTERTAINMENT SUITE*
+│ ↳ Type \`${prefix}menufun\`
+│   _Riddles, trivia, zodiac, tarot, dice, slots, coin flip, games_
+│
+│ ⚔️ *7. RPG ADVENTURE & ECONOMY*
+│ ↳ Type \`${prefix}menurpg\`
+│   _Guilds, inventory, quests, dungeon, profile, battle system_
+│
+│ 🤖 *8. BOT SETTINGS & SYSTEM*
+│ ↳ Type \`${prefix}menubot\`
+│   _Speed ping, uptime, usage stats, changelog, bot mode_
+│
+│ 🖥️ *9. CPANEL & RENTAL SUITE*
+│ ↳ Type \`${prefix}cpanel\` or \`${prefix}sewa\`
+│   _Pterodactyl server manager, RAM tiers, group rentals_
+╰──────────────────────────────────────
+
+💡 *How to View Commands:*
+Tap any category button below, or type the command name (e.g. \`${prefix}menuadmin\`).
+📄 _To view the complete unrolled directory of all 2,000+ commands in raw text, type:_
+\`${prefix}allmenu full\`
+
+👑 *Developer:* AHSAN (03107260507)
+📢 *Official Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46`;
+
+        // Send via interactive buttons or thumbnail message
+        try {
+            const { generateWAMessageFromContent } = await import('@whiskeysockets/baileys');
+            const waMsg = generateWAMessageFromContent(ctx.jid, {
+                viewOnceMessage: {
+                    message: {
+                        messageContextInfo: {
+                            deviceListMetadata: {},
+                            deviceListMetadataVersion: 2
+                        },
+                        interactiveMessage: {
+                            body: { text: categoryDashboard },
+                            footer: { text: `© ${settings.botName} • Developed by AHSAN (03107260507)` },
+                            header: {
+                                title: `⚡ *${settings.botName} COMMAND SUITES* ⚡`,
+                                hasMediaAttachment: false
+                            },
+                            nativeFlowMessage: {
+                                buttons: [
+                                    {
+                                        name: 'quick_reply',
+                                        buttonParamsJson: JSON.stringify({
+                                            display_text: '🛡️ Admin Menu',
+                                            id: `${prefix}menuadmin`
+                                        })
+                                    },
+                                    {
+                                        name: 'quick_reply',
+                                        buttonParamsJson: JSON.stringify({
+                                            display_text: '👑 Owner Menu',
+                                            id: `${prefix}menuowner`
+                                        })
+                                    },
+                                    {
+                                        name: 'quick_reply',
+                                        buttonParamsJson: JSON.stringify({
+                                            display_text: '🛠️ Tools Menu',
+                                            id: `${prefix}menutools`
+                                        })
+                                    },
+                                    {
+                                        name: 'quick_reply',
+                                        buttonParamsJson: JSON.stringify({
+                                            display_text: '📥 Downloader Menu',
+                                            id: `${prefix}menumedia`
+                                        })
+                                    },
+                                    {
+                                        name: 'single_select',
+                                        buttonParamsJson: JSON.stringify({
+                                            title: 'Explore All 9 Suites',
+                                            sections: [
+                                                {
+                                                    title: 'Management & Core',
+                                                    rows: [
+                                                        { header: '', title: '🛡️ Admin Menu', description: 'Group moderation & controls', id: `${prefix}menuadmin` },
+                                                        { header: '', title: '👑 Owner Menu', description: 'Developer controls & broadcast', id: `${prefix}menuowner` },
+                                                        { header: '', title: '🤖 Bot Core', description: 'Latency ping & statistics', id: `${prefix}menubot` },
+                                                    ]
+                                                },
+                                                {
+                                                    title: 'Media, Tools & AI',
+                                                    rows: [
+                                                        { header: '', title: '🛠️ Tools Menu', description: 'Converters & utility tools', id: `${prefix}menutools` },
+                                                        { header: '', title: '📥 Downloader Menu', description: 'Media downloads & .vv view-once', id: `${prefix}menumedia` },
+                                                        { header: '', title: '🧠 AI Assistant', description: 'Smart chat & prompts', id: `${prefix}menuai` },
+                                                    ]
+                                                },
+                                                {
+                                                    title: 'Entertainment & Games',
+                                                    rows: [
+                                                        { header: '', title: '🎮 Fun & Games', description: 'Trivia, riddles & memes', id: `${prefix}menufun` },
+                                                        { header: '', title: '⚔️ RPG System', description: 'Inventory, quests & adventures', id: `${prefix}menurpg` },
+                                                        { header: '', title: '🖥️ cPanel & Rental', description: 'Pterodactyl server controls', id: `${prefix}cpanel` },
+                                                    ]
+                                                }
+                                            ]
+                                        })
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            }, { quoted: ctx.msg, userJid: ctx.sock.user?.jid });
+
+            await ctx.sock.relayMessage(ctx.jid, waMsg.message, { messageId: waMsg.key.id });
+            return;
+        } catch (btnErr) {
+            try {
+                const imageContent = getThumbnailImageContent();
+                await ctx.sock.sendMessage(ctx.jid, { ...imageContent, caption: categoryDashboard }, { quoted: ctx.msg });
+                return;
+            } catch {
+                await ctx.reply(categoryDashboard);
+                return;
+            }
+        }
+    }
 
     const bannerCaption =
 `╔══════════════════════════════════════╗
@@ -5814,9 +5988,10 @@ export async function handleCommand(sock, msg, jid, sender, command, args, isGro
     if (isGroup && isSewaMode() && !isOwnerFlag && !isCreatorFlag && !SEWA_BYPASS_CMDS.has(command)) {
         if (!isSewaActive(jid)) {
             return replyWithThumb(sock, jid,
-                `⏳ *Bot Belum Disewa*\n\n` +
-                `Grup ini belum memiliki sewa bot aktif.\n` +
-                `Ketik \`${settings.prefix}hargasewa\` untuk info harga dan cara sewa.`,
+                `⏳ *Bot Not Authorized / Rented*\n\n` +
+                `This group does not have an active bot authorization or rental.\n` +
+                `👑 Developer: AHSAN (03107260507)\n` +
+                `Type \`${settings.prefix}hargasewa\` or \`${settings.prefix}owner\` for access info.`,
                 msg
             );
         }

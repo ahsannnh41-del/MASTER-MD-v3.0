@@ -743,79 +743,95 @@ ${sc('Fast')} • ${sc('Stable')} • ${sc('Secure')}
                 log?.warn?.(`[menu] Header thumbnail warning: ${thumbErr.message}`);
             }
 
-            const rows = [
-                { title: '🤖 All Commands',     description: 'View all 2000+ commands directory', id: `${P}allmenu`     },
-                { title: '👑 Owner Info',        description: 'Developer contact & channel',       id: `${P}owner`       },
-                { title: '⚡ Latency Ping',      description: 'Check bot server response speed',   id: `${P}ping`        },
-                { title: '📢 Official Channel',  description: 'Updates & news channel',            id: `${P}credits`     },
-                { title: '🛡️ Admin Menu',        description: 'Group moderation & security tools', id: `${P}menuadmin`   },
-                { title: '🧠 AI Supercharged',    description: 'Smart AI assistant & prompts',      id: `${P}ai`          },
-                { title: '📥 Downloader Menu',    description: 'TikTok, Instagram, YouTube & more', id: `${P}menumedia`   },
-                { title: '🛠️ Tools Menu',        description: 'Converters & utility tools',        id: `${P}menutools`   },
-                { title: '🎮 Fun & Games',       description: 'Games, memes & trivia',             id: `${P}menufun`     },
-                { title: '⚔️ RPG System',        description: 'Guilds, inventory & adventures',    id: `${P}menurpg`     },
-                { title: '🤖 Bot Settings',      description: 'Bot configuration & options',       id: `${P}menubot`     },
+            const interactiveButtons = [
+                {
+                    name: 'quick_reply',
+                    buttonParamsJson: JSON.stringify({
+                        display_text: '🤖 All Commands',
+                        id: `${P}allmenu`
+                    })
+                },
+                {
+                    name: 'quick_reply',
+                    buttonParamsJson: JSON.stringify({
+                        display_text: '🛡️ Admin Menu',
+                        id: `${P}menuadmin`
+                    })
+                },
+                {
+                    name: 'cta_url',
+                    buttonParamsJson: JSON.stringify({
+                        display_text: '📢 Official Channel',
+                        url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46'
+                    })
+                },
+                {
+                    name: 'single_select',
+                    buttonParamsJson: JSON.stringify({
+                        title: `${BOT} Command Suites`,
+                        sections: [
+                            {
+                                title: 'Core Navigation',
+                                rows: [
+                                    { header: '', title: '🤖 All Commands', description: 'Interactive 2000+ commands dashboard', id: `${P}allmenu` },
+                                    { header: '', title: '👑 Owner Info', description: 'Developer contact & channel', id: `${P}owner` },
+                                    { header: '', title: '⚡ Latency Ping', description: 'Check bot server response speed', id: `${P}ping` },
+                                    { header: '', title: '📢 Official Channel', description: 'Updates & news channel', id: `${P}credits` },
+                                ]
+                            },
+                            {
+                                title: 'Features & Utilities',
+                                rows: [
+                                    { header: '', title: '🛡️ Admin Menu', description: 'Group moderation & security tools', id: `${P}menuadmin` },
+                                    { header: '', title: '🧠 AI Supercharged', description: 'Smart AI assistant & prompts', id: `${P}menuai` },
+                                    { header: '', title: '📥 Downloader Menu', description: 'TikTok, Instagram, YouTube & more', id: `${P}menumedia` },
+                                    { header: '', title: '🛠️ Tools Menu', description: 'Converters & utility tools', id: `${P}menutools` },
+                                ]
+                            },
+                            {
+                                title: 'Entertainment & System',
+                                rows: [
+                                    { header: '', title: '🎮 Fun & Games', description: 'Games, memes & trivia', id: `${P}menufun` },
+                                    { header: '', title: '⚔️ RPG System', description: 'Guilds, inventory & adventures', id: `${P}menurpg` },
+                                    { header: '', title: '🤖 Bot Settings', description: 'Bot configuration & options', id: `${P}menubot` },
+                                ]
+                            }
+                        ]
+                    })
+                }
             ];
 
             const waMsg = generateWAMessageFromContent(jid, {
-                buttonsMessage: {
-                    contentText: `${menuText}\n\n👇 *Select an option below or tap buttons:*`,
-                    footerText: `© ${BOT} • Developed by AHSAN`,
-                    ...(headerImageMessage
-                        ? { headerType: 4, imageMessage: headerImageMessage }
-                        : { headerType: 1 }),
-                    viewOnce: true,
-                    buttons: [
-                        {
-                            buttonId: `${P}allmenu`,
-                            buttonText: { displayText: '🤖 All Commands' },
-                            type: 1,
+                viewOnceMessage: {
+                    message: {
+                        messageContextInfo: {
+                            deviceListMetadata: {},
+                            deviceListMetadataVersion: 2
                         },
-                        {
-                            buttonId: 'channel_cta',
-                            buttonText: { displayText: '📢 Official Channel' },
-                            type: 1,
-                            nativeFlowInfo: {
-                                name: 'cta_url',
-                                paramsJson: JSON.stringify({
-                                    display_text: '📢 Official Channel',
-                                    url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46',
-                                    merchant_url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46',
-                                }),
+                        interactiveMessage: {
+                            body: {
+                                text: `${menuText}\n\n👇 *Select an option below or tap buttons:*`
                             },
-                        },
-                        {
-                            buttonId: 'menu_list',
-                            buttonText: { displayText: '☰ Menu Categories' },
-                            type: 1,
-                            nativeFlowInfo: {
-                                name: 'single_select',
-                                paramsJson: JSON.stringify({
-                                    title: `${BOT} Command Suites`,
-                                    sections: [
-                                        { title: 'Core Navigation', rows: rows.slice(0, 4) },
-                                        { title: 'Features & Tools', rows: rows.slice(4, 8) },
-                                        { title: 'Games & RPG', rows: rows.slice(8, 11) },
-                                    ]
-                                })
+                            footer: {
+                                text: `© ${BOT} • Developed by AHSAN (03107260507)`
+                            },
+                            header: headerImageMessage ? {
+                                title: BOT,
+                                hasMediaAttachment: true,
+                                imageMessage: headerImageMessage
+                            } : {
+                                title: `⚡ *${BOT} v${settings.botVersion || '3.0.0'}* ⚡`,
+                                hasMediaAttachment: false
+                            },
+                            nativeFlowMessage: {
+                                buttons: interactiveButtons
                             }
                         }
-                    ]
+                    }
                 }
             }, { quoted: msg, userJid: sock.user?.jid });
 
-            await sock.relayMessage(jid, waMsg.message, {
-                messageId: waMsg.key.id,
-                additionalNodes: [{
-                    tag: 'biz',
-                    attrs: {},
-                    content: [{
-                        tag: 'interactive',
-                        attrs: { type: 'native_flow', v: '1' },
-                        content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }]
-                    }]
-                }],
-            });
+            await sock.relayMessage(jid, waMsg.message, { messageId: waMsg.key.id });
             return;
         } catch (err) {
             log?.warn?.(`[menu] Interactive buttons relay fallback: ${err.message}`);
@@ -1472,6 +1488,11 @@ export async function sendMediaMenu(reply) {
 ║   🖼️  *${sc('MEDIA & DOWNLOADER MENU')}*
 ╚══════════════════════════════════════╝
 
+╭─「 🔓 *${sc('VIEW-ONCE RETRIEVER (.vv)')}* 」
+│ ${P}vv / ${P}rvo       — Retrieve View-Once photos, videos & audios
+│ _Reply to any View-Once media with \`${P}vv\` to save it permanently!_
+╰──────────────────────────────
+
 ╭─「 🎵 *${sc('YOUTUBE MUSIC')}* 」
 │ ${P}play <query>   — Search & download audio from YouTube
 │ _Example: \`${P}play Alan Walker Faded\`_
@@ -1551,5 +1572,48 @@ export async function sendBotMenu(reply) {
 │ ${P}backupnow  — Create manual data backup (Owner)
 │ ${P}version    — View current MASTER MD version
 ╰──────────────────────────────${buildRegistryCategoryPack('🤖 Bot', '🤖 Bot')}`
+    );
+}
+
+// ─── OWNER MENU (ENGLISH) ──────────────────────────────────────────
+export async function sendOwnerMenu(reply) {
+    await reply(
+`╔══════════════════════════════════════╗
+║   👑  *${sc('OWNER & DEVELOPER CONTROLS')}*
+╚══════════════════════════════════════╝
+
+👑 *System Architect:* AHSAN (03107260507)
+📢 *Official Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46
+
+╭─「 🔐 *${sc('OWNER CONTROLS')}* 」
+│ ${P}broadcast <msg>      — Broadcast announcement to all groups
+│ ${P}broadcastuser <msg>  — Broadcast message to all private users
+│ ${P}addowner / ${P}delowner — Add or remove bot owners
+│ ${P}addprem / ${P}delprem   — Grant or revoke VIP premium status
+│ ${P}backupnow            — Instant full server data backup
+│ ${P}self / ${P}public    — Switch bot between private & public mode
+│ ${P}botstats             — System performance and command statistics
+│ ${P}setprefix <symbol>   — Change bot command prefix
+╰──────────────────────────────
+> © 2026 MASTER MD • All Rights Reserved to AHSAN`
+    );
+}
+
+// ─── AI MENU (ENGLISH) ─────────────────────────────────────────────
+export async function sendAiMenu(reply) {
+    await reply(
+`╔══════════════════════════════════════╗
+║   🧠  *${sc('AI & SMART ASSISTANT MENU')}*
+╚══════════════════════════════════════╝
+
+╭─「 🤖 *${sc('ARTIFICIAL INTELLIGENCE')}* 」
+│ ${P}ai <prompt>         — Ask Gemini / GPT AI anything
+│ ${P}gojoai on/off       — Toggle automatic conversational AI
+│ ${P}dalle <prompt>       — Generate AI images from description
+│ ${P}gemini <prompt>      — Advanced multimodal reasoning
+│ ${P}imagine <prompt>     — Creative artwork synthesizer
+│ ${P}translate <lang>     — AI-powered multi-language translator
+╰──────────────────────────────
+> © 2026 MASTER MD • Developed by AHSAN`
     );
 }

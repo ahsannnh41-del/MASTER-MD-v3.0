@@ -1,24 +1,19 @@
 // ═══════════════════════════════════════════════════════════════════
-//  ADMINCOMMANDS6.JS — Batch admin baru:
-//    1) Bulk operations  2) Activity tracker
-//    3) Task assignment  4) Maintenance mode
-//
-//  (Awalnya juga rencana nambah "Group Rules", tapi ternyata .setrules/
-//  .rules SUDAH ADA lewat adminCommands2.js — dilewati supaya tidak
-//  duplikat fitur yang sama persis.)
+//  ADMINCOMMANDS6.JS — Advanced Group Management:
+//    1) Bulk Operations  2) Activity Tracker
+//    3) Task Assignment  4) Maintenance Mode
+//  Developer: AHSAN (03107260507)
 // ═══════════════════════════════════════════════════════════════════
 
 import { store, save } from '../lib/db.js';
 import { fmtNum } from '../lib/utils.js';
 
 function requireAdmin(ctx) {
-    if (!ctx.isAdmin) { ctx.reply('❌ Khusus Admin grup.'); return false; }
+    if (!ctx.isAdmin) { ctx.reply('❌ Group Admins only.'); return false; }
     return true;
 }
 
 function extractAllMentioned(ctx) {
-    // Bulk operations pakai SEMUA yang di-mention dalam 1 pesan (bukan
-    // cuma yang pertama seperti extractTarget di file lain).
     return ctx.mentioned || [];
 }
 
@@ -28,43 +23,42 @@ function extractAllMentioned(ctx) {
 export async function bulkPromote(ctx) {
     if (!requireAdmin(ctx)) return;
     const targets = extractAllMentioned(ctx);
-    if (!targets.length) return ctx.reply('⚠️ Cara pakai: `.bulkpromote @user1 @user2 @user3 ...`');
+    if (!targets.length) return ctx.reply('⚠️ Usage: `.bulkpromote @user1 @user2 @user3 ...`');
     try {
         await ctx.sock.groupParticipantsUpdate(ctx.jid, targets, 'promote');
-        return ctx.reply(`✅ ${targets.length} member berhasil dipromote jadi admin.`);
+        return ctx.reply(`✅ ${targets.length} members successfully promoted to admin.`);
     } catch (err) {
-        return ctx.reply(`❌ Gagal: ${err.message}`);
+        return ctx.reply(`❌ Failed: ${err.message}`);
     }
 }
 
 export async function bulkDemote(ctx) {
     if (!requireAdmin(ctx)) return;
     const targets = extractAllMentioned(ctx);
-    if (!targets.length) return ctx.reply('⚠️ Cara pakai: `.bulkdemote @user1 @user2 @user3 ...`');
+    if (!targets.length) return ctx.reply('⚠️ Usage: `.bulkdemote @user1 @user2 @user3 ...`');
     try {
         await ctx.sock.groupParticipantsUpdate(ctx.jid, targets, 'demote');
-        return ctx.reply(`✅ ${targets.length} admin berhasil diturunkan jadi member biasa.`);
+        return ctx.reply(`✅ ${targets.length} admins demoted to regular members.`);
     } catch (err) {
-        return ctx.reply(`❌ Gagal: ${err.message}`);
+        return ctx.reply(`❌ Failed: ${err.message}`);
     }
 }
 
 export async function bulkKick(ctx) {
     if (!requireAdmin(ctx)) return;
     const targets = extractAllMentioned(ctx);
-    if (!targets.length) return ctx.reply('⚠️ Cara pakai: `.bulkkick @user1 @user2 @user3 ...`');
-    if (targets.length > 15) return ctx.reply('❌ Maksimal 15 orang sekaligus (biar tidak kena rate-limit WhatsApp).');
+    if (!targets.length) return ctx.reply('⚠️ Usage: `.bulkkick @user1 @user2 @user3 ...`');
+    if (targets.length > 15) return ctx.reply('❌ Maximum 15 members per command (to prevent WhatsApp rate limits).');
     try {
         await ctx.sock.groupParticipantsUpdate(ctx.jid, targets, 'remove');
-        return ctx.reply(`✅ ${targets.length} member berhasil dikeluarkan dari grup.`);
+        return ctx.reply(`✅ ${targets.length} members successfully removed from group.`);
     } catch (err) {
-        return ctx.reply(`❌ Gagal: ${err.message}`);
+        return ctx.reply(`❌ Failed: ${err.message}`);
     }
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  2) ACTIVITY TRACKER — hook-nya ada di lib/messagePipeline.js
-//     (trackActivity dipanggil di sana tiap ada pesan masuk dari grup)
+//  2) ACTIVITY TRACKER
 // ═══════════════════════════════════════════════════════════════════
 function activityStore() { return store('memberActivity', {}); }
 function activityKey(jid, sender) { return `${jid}:${sender}`; }
@@ -85,18 +79,18 @@ export async function listInactive(ctx) {
     const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
     const data = activityStore();
     const meta = await ctx.sock.groupMetadata(ctx.jid).catch(() => null);
-    if (!meta) return ctx.reply('❌ Gagal ambil data member grup.');
+    if (!meta) return ctx.reply('❌ Failed to fetch group members.');
 
     const inactive = [];
     for (const p of meta.participants) {
-        if (p.admin) continue; // skip admin dari daftar inaktif
+        if (p.admin) continue;
         const entry = data[activityKey(ctx.jid, p.id)];
         if (!entry || entry.lastMessageAt < cutoff) inactive.push(p.id);
     }
-    if (!inactive.length) return ctx.reply(`✅ Tidak ada member (non-admin) yang inaktif ${days}+ hari.`);
-    let txt = `😴 *MEMBER INAKTIF (${days}+ hari)* — ${inactive.length} orang\n\n`;
+    if (!inactive.length) return ctx.reply(`✅ No inactive non-admin members found in the last ${days}+ days.`);
+    let txt = `😴 *INACTIVE MEMBERS (${days}+ days)* — Total ${inactive.length}\n\n`;
     inactive.slice(0, 40).forEach((jid, i) => { txt += `${i + 1}. \`${jid.split('@')[0]}\`\n`; });
-    if (inactive.length > 40) txt += `\n_...dan ${inactive.length - 40} lainnya._`;
+    if (inactive.length > 40) txt += `\n_...and ${inactive.length - 40} more._`;
     return ctx.reply(txt);
 }
 
@@ -108,11 +102,11 @@ export async function topActive(ctx) {
         .map(([key, val]) => ({ jid: key.slice(prefix.length), ...val }))
         .sort((a, b) => b.messageCount - a.messageCount)
         .slice(0, 15);
-    if (!entries.length) return ctx.reply('ℹ️ Belum ada data aktivitas untuk grup ini.');
-    let txt = `🏆 *TOP MEMBER PALING AKTIF*\n\n`;
+    if (!entries.length) return ctx.reply('ℹ️ No chat activity recorded yet for this group.');
+    let txt = `🏆 *MOST ACTIVE GROUP MEMBERS*\n\n`;
     entries.forEach((e, i) => {
         const medal = ['🥇', '🥈', '🥉'][i] || `${i + 1}.`;
-        txt += `${medal} \`${e.jid.split('@')[0]}\` — ${fmtNum(e.messageCount)} pesan\n`;
+        txt += `${medal} \`${e.jid.split('@')[0]}\` — ${fmtNum(e.messageCount)} messages\n`;
     });
     return ctx.reply(txt);
 }
@@ -127,7 +121,7 @@ export async function taskAssign(ctx) {
     const quotedParticipant = ctx.msg.message?.extendedTextMessage?.contextInfo?.participant;
     const target = quotedParticipant || ctx.mentioned?.[0];
     const text = ctx.body.replace(/@\d+/, '').split(' ').slice(1).join(' ').trim();
-    if (!target || !text) return ctx.reply('⚠️ Cara pakai: `.assigntask @user [deskripsi tugas]` atau reply pesan target + tulis tugasnya.');
+    if (!target || !text) return ctx.reply('⚠️ Usage: `.assigntask @user [task description]` or reply to user message.');
 
     const data = taskStore();
     const list = data[ctx.jid] || [];
@@ -135,19 +129,19 @@ export async function taskAssign(ctx) {
     data[ctx.jid] = list;
     save('groupTasks');
     try {
-        await ctx.sock.sendMessage(target, { text: `📋 *Tugas baru dari grup!*\n\n${text}\n\nTandai selesai lewat \`.donetask ${list.length}\` di grup terkait.` });
+        await ctx.sock.sendMessage(target, { text: `📋 *New task assigned in group!*\n\n${text}\n\nMark complete with \`.donetask ${list.length}\` in the group.` });
     } catch {}
-    return ctx.reply(`✅ Tugas #${list.length} diberikan ke \`${target.split('@')[0]}\`.`);
+    return ctx.reply(`✅ Task #${list.length} assigned to \`${target.split('@')[0]}\`.`);
 }
 
 export async function taskMine(ctx) {
     const data = taskStore();
     const list = data[ctx.jid] || [];
     const mine = list.filter(t => t.target === ctx.sender && !t.done);
-    if (!mine.length) return ctx.reply('✅ Tidak ada tugas aktif untuk kamu di grup ini.');
-    let txt = `📋 *TUGAS KAMU*\n\n`;
+    if (!mine.length) return ctx.reply('✅ No active tasks assigned to you in this group.');
+    let txt = `📋 *YOUR ASSIGNED TASKS*\n\n`;
     mine.forEach(t => { txt += `#${t.id} — ${t.text}\n`; });
-    txt += `\nTandai selesai: \`.donetask [nomor]\``;
+    txt += `\nMark complete: \`.donetask [number]\``;
     return ctx.reply(txt);
 }
 
@@ -155,27 +149,27 @@ export async function taskList(ctx) {
     if (!requireAdmin(ctx)) return;
     const data = taskStore();
     const list = (data[ctx.jid] || []).filter(t => !t.done);
-    if (!list.length) return ctx.reply('✅ Tidak ada tugas aktif di grup ini.');
-    let txt = `📋 *SEMUA TUGAS AKTIF* — ${list.length}\n\n`;
+    if (!list.length) return ctx.reply('✅ No pending tasks in this group.');
+    let txt = `📋 *ACTIVE GROUP TASKS* — Total ${list.length}\n\n`;
     list.forEach(t => { txt += `#${t.id} — \`${t.target.split('@')[0]}\`: ${t.text}\n`; });
     return ctx.reply(txt);
 }
 
 export async function taskDone(ctx) {
     const id = parseInt(ctx.args[0], 10);
-    if (!id) return ctx.reply('⚠️ Cara pakai: `.donetask [nomor]`');
+    if (!id) return ctx.reply('⚠️ Usage: `.donetask [task_number]`');
     const data = taskStore();
     const list = data[ctx.jid] || [];
     const task = list.find(t => t.id === id);
-    if (!task) return ctx.reply('❌ Tugas dengan nomor itu tidak ditemukan.');
-    if (task.target !== ctx.sender && !ctx.isAdmin) return ctx.reply('❌ Cuma yang ditugaskan (atau admin) yang bisa tandai tugas ini selesai.');
+    if (!task) return ctx.reply('❌ Task with that number was not found.');
+    if (task.target !== ctx.sender && !ctx.isAdmin) return ctx.reply('❌ Only the assigned member (or admin) can mark this task complete.');
     task.done = true;
     save('groupTasks');
-    return ctx.reply(`✅ Tugas #${id} ditandai selesai.`);
+    return ctx.reply(`✅ Task #${id} marked as completed!`);
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  5) MAINTENANCE MODE — hook-nya ada di lib/messagePipeline.js
+//  4) MAINTENANCE MODE
 // ═══════════════════════════════════════════════════════════════════
 function maintenanceStore() { return store('groupMaintenance', {}); }
 
@@ -185,14 +179,14 @@ export function isMaintenanceMode(jid) {
 
 export async function maintenanceToggle(ctx) {
     if (!ctx.isAdmin && !ctx.isOwner && !ctx.isCreator) {
-        return ctx.reply('❌ Hanya Admin grup, Owner, atau Creator yang bisa mengubah mode ini.');
+        return ctx.reply('❌ Only Group Admins, Owner, or Creator can change maintenance mode.');
     }
     const arg = (ctx.args[0] || '').toLowerCase();
     if (!['on', 'off'].includes(arg)) {
-        return ctx.reply(`📌 *Maintenance Mode* — saat ON, bot cuma respon Owner/Creator (member lain diabaikan sementara)\n\nStatus: *${isMaintenanceMode(ctx.jid) ? '✅ ON' : '❌ OFF'}*\n\nKetik \`.maintenancemode on\` atau \`.maintenancemode off\``);
+        return ctx.reply(`📌 *Maintenance Mode* — When active, the bot only responds to Owner/Creator in this group.\n\nStatus: *${isMaintenanceMode(ctx.jid) ? '✅ ON' : '❌ OFF'}*\n\nType \`.maintenancemode on\` or \`.maintenancemode off\``);
     }
     const data = maintenanceStore();
     data[ctx.jid] = arg === 'on';
     save('groupMaintenance');
-    return ctx.reply(`${arg === 'on' ? '🛠️ Maintenance mode AKTIF' : '✅ Maintenance mode NONAKTIF'} untuk grup ini.`);
+    return ctx.reply(`${arg === 'on' ? '🛠️ Maintenance mode ACTIVATED' : '✅ Maintenance mode DEACTIVATED'} for this group.`);
 }

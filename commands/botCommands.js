@@ -30,11 +30,11 @@ export async function botStats(ctx) {
         .sort((a, b) => b[1] - a[1])
         .slice(0, 10);
 
-    let txt = `📊 *STATISTIK PEMAKAIAN BOT*\n\n`;
-    txt += `Total command dijalankan: *${fmtNum(data.total || 0)}*\n`;
-    txt += `Hari ini: *${fmtNum(todayCount)}*\n\n`;
+    let txt = `📊 *BOT USAGE STATISTICS*\n\n`;
+    txt += `Total commands executed: *${fmtNum(data.total || 0)}*\n`;
+    txt += `Today: *${fmtNum(todayCount)}*\n\n`;
     if (topCommands.length) {
-        txt += `🏆 *Top 10 Command Terpopuler:*\n`;
+        txt += `🏆 *Top 10 Most Popular Commands:*\n`;
         topCommands.forEach(([cmd, count], i) => {
             txt += `${i + 1}. .${cmd} — ${fmtNum(count)}x\n`;
         });
@@ -45,18 +45,18 @@ export async function botStats(ctx) {
 // ── CHANGELOG ────────────────────────────────────────────────────────
 const CHANGELOG = [
     { version: '3.2.0', date: '2026-07', notes: [
-        'Fitur Cpanel — jualan slot server Pterodactyl (v1-v5)',
-        'Sistem Guild/Clan untuk RPG',
-        'Gojo AI — mode chat AI ala Gojo Satoru',
-        '5+ subsistem admin baru (pengumuman, catatan member, template grup, tugas, bulk operations)',
-        '20+ tools baru (QR code, cipher tambahan, kalkulator finansial, dll)',
-        '6 downloader platform baru (Threads, Reddit, Bilibili, dll)',
-        'Transformasi media baru (grayscale, mirror, blur, speed, dll)',
+        'Cpanel Features — Pterodactyl server reseller engine (v1-v5)',
+        'Guild/Clan System for RPG adventures',
+        'Smart AI Chat System',
+        'Advanced group administration suites (pins, notes, templates, tasks, bulk ops)',
+        '20+ new utility tools (QR generator, financial calculator, etc.)',
+        '6 new social downloader platforms (TikTok, Instagram, YouTube, etc.)',
+        'Media transformations and View-Once retriever (.vv)',
     ]},
     { version: '3.1.0', date: '2026-06', notes: [
-        '300+ Command Admin baru',
-        'Proteksi tambahan (antilinkphising, antijudol, antipinjol, dll)',
-        'Anti-Flood akhirnya aktif di alur pesan',
+        '300+ New Admin moderation commands',
+        'Advanced protection shields (Anti-Phishing, Anti-Link, Anti-Spam)',
+        'Anti-Flood & auto-rate-limiting enabled',
     ]},
 ];
 
@@ -76,18 +76,18 @@ function suggestionStore() { return store('suggestions', []); }
 
 export async function submitSuggestion(ctx) {
     const text = ctx.args.join(' ').trim();
-    if (!text) return ctx.reply('📌 Cara pakai: *.suggest [saran fitur/perbaikan]*');
+    if (!text) return ctx.reply('📌 Usage: *.suggest [feature suggestion / feedback]*');
     const list = suggestionStore();
     list.push({ id: list.length + 1, text, from: ctx.sender, at: Date.now() });
     save('suggestions');
-    return ctx.reply('✅ Terima kasih! Saran kamu sudah dicatat untuk ditinjau Owner.');
+    return ctx.reply('✅ Thank you! Your feedback has been recorded for developer review.');
 }
 
 export async function listSuggestions(ctx) {
-    if (!ctx.isOwner && !ctx.isCreator) return ctx.reply('❌ Khusus Owner/Creator.');
+    if (!ctx.isOwner && !ctx.isCreator) return ctx.reply('❌ Owner / Creator only.');
     const list = suggestionStore();
-    if (!list.length) return ctx.reply('ℹ️ Belum ada saran masuk.');
-    let txt = `💡 *DAFTAR SARAN* — total ${list.length}\n\n`;
+    if (!list.length) return ctx.reply('ℹ️ No suggestions submitted yet.');
+    let txt = `💡 *SUGGESTIONS LIST* — Total ${list.length}\n\n`;
     list.slice(-20).reverse().forEach(s => {
         txt += `#${s.id} — \`${s.from.split('@')[0]}\`\n${s.text}\n\n`;
     });
@@ -95,19 +95,19 @@ export async function listSuggestions(ctx) {
 }
 
 export async function clearSuggestions(ctx) {
-    if (!ctx.isOwner && !ctx.isCreator) return ctx.reply('❌ Khusus Owner/Creator.');
+    if (!ctx.isOwner && !ctx.isCreator) return ctx.reply('❌ Owner / Creator only.');
     const data = suggestionStore();
     data.length = 0;
     save('suggestions');
-    return ctx.reply('✅ Semua saran sudah dibersihkan.');
+    return ctx.reply('✅ All suggestions have been cleared.');
 }
 
 // ── CREDITS & SUPPORT ────────────────────────────────────────────────
 export async function showCredits(ctx) {
     const txt = `⚡ *MASTER MD CREDITS* ⚡\n\n` +
-        `👑 *Developer:* AHSAN\n` +
+        `👑 *Developer:* AHSAN (03107260507)\n` +
         `🤖 *Bot Name:* ${settings.botName} (v${settings.botVersion})\n` +
-        `📢 *Official Channel:* ${settings.channelUrl || 'https://whatsapp.com'}\n\n` +
+        `📢 *Official Channel:* ${settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46'}\n\n` +
         `Built with high performance Baileys Multi-Device engine, interactive buttons, 2000+ commands, and anti-tamper security.\n\n` +
         `© 2026 MASTER MD • All Rights Reserved to AHSAN.`;
     return ctx.reply(txt);
@@ -125,19 +125,19 @@ export async function showSupport(ctx) {
 
 // ── BACKUP MANUAL ────────────────────────────────────────────────────
 export async function backupNow(ctx) {
-    if (!ctx.isOwner && !ctx.isCreator) return ctx.reply('❌ Khusus Owner/Creator.');
+    if (!ctx.isOwner && !ctx.isCreator) return ctx.reply('❌ Owner / Creator only.');
     try {
         const fs = await import('fs');
         const path = await import('path');
-        if (!fs.existsSync('./data')) return ctx.reply('ℹ️ Folder data/ belum ada, belum ada yang perlu di-backup.');
+        if (!fs.existsSync('./data')) return ctx.reply('ℹ️ Data directory does not exist yet; nothing to back up.');
         const backupDir = `./data-backup-manual-${Date.now()}`;
         fs.mkdirSync(backupDir, { recursive: true });
         const files = fs.readdirSync('./data');
         for (const file of files) {
             fs.copyFileSync(path.join('./data', file), path.join(backupDir, file));
         }
-        return ctx.reply(`✅ Backup manual berhasil!\n\n📁 ${files.length} file disalin ke:\n\`${backupDir}\``);
+        return ctx.reply(`✅ Manual backup completed!\n\n📁 ${files.length} files copied to:\n\`${backupDir}\``);
     } catch (err) {
-        return ctx.reply(`❌ Gagal backup: ${err.message}`);
+        return ctx.reply(`❌ Backup failed: ${err.message}`);
     }
 }

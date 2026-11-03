@@ -1,7 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════
-//  ADMINCOMMANDS5.JS — 5 subsistem admin baru:
-//    1) Pin/Announcement  2) Member Notes  3) Group Template
-//    4) Scheduled Announcement  5) Birthday Tracker
+//  ADMINCOMMANDS5.JS — Group Admin Utilities:
+//    1) Pin/Announcement  2) Member Notes  3) Group Templates
+//    4) Scheduled Announcements  5) Birthday Tracker
+//  Developer: AHSAN (03107260507)
 // ═══════════════════════════════════════════════════════════════════
 
 import { store, save } from '../lib/db.js';
@@ -9,7 +10,7 @@ import { getGroupSettings, updateGroupSettings } from '../lib/db.js';
 import { fmtNum } from '../lib/utils.js';
 
 function requireAdmin(ctx) {
-    if (!ctx.isAdmin) { ctx.reply('❌ Khusus Admin grup.'); return false; }
+    if (!ctx.isAdmin) { ctx.reply('❌ Group Admins only.'); return false; }
     return true;
 }
 
@@ -21,39 +22,39 @@ function extractTarget(ctx) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  1) PIN / ANNOUNCEMENT — pengumuman grup yang bisa dilihat kapan saja
+//  1) PIN / ANNOUNCEMENTS
 // ═══════════════════════════════════════════════════════════════════
 function pinStore() { return store('groupPins', {}); }
 
 export async function pinAdd(ctx) {
     if (!requireAdmin(ctx)) return;
     const text = ctx.args.join(' ').trim();
-    if (!text) return ctx.reply('⚠️ Cara pakai: `.pin [teks pengumuman]`');
+    if (!text) return ctx.reply('⚠️ Usage: `.pin [announcement text]`');
     const data = pinStore();
     data[ctx.jid] = { text, by: ctx.sender, at: Date.now() };
     save('groupPins');
-    return ctx.reply('📌 *Pengumuman berhasil dipasang.*\n\nLihat kapan saja lewat `.listpin`.');
+    return ctx.reply('📌 *Group announcement pinned successfully.*\n\nView anytime with `.listpin`.');
 }
 
 export async function pinRemove(ctx) {
     if (!requireAdmin(ctx)) return;
     const data = pinStore();
-    if (!data[ctx.jid]) return ctx.reply('ℹ️ Belum ada pengumuman terpasang.');
+    if (!data[ctx.jid]) return ctx.reply('ℹ️ No active pinned announcement found.');
     delete data[ctx.jid];
     save('groupPins');
-    return ctx.reply('✅ Pengumuman dihapus.');
+    return ctx.reply('✅ Pinned announcement removed.');
 }
 
 export async function pinList(ctx) {
     const data = pinStore();
     const pin = data[ctx.jid];
-    if (!pin) return ctx.reply('ℹ️ Belum ada pengumuman di grup ini.\nAdmin bisa pasang lewat `.pin [teks]`.');
-    const date = new Date(pin.at).toLocaleString('id-ID');
-    return ctx.reply(`📌 *PENGUMUMAN GRUP*\n\n${pin.text}\n\n_Dipasang: ${date}_`);
+    if (!pin) return ctx.reply('ℹ️ No active pinned announcement in this group.\nAdmins can set one with `.pin [text]`.');
+    const date = new Date(pin.at).toLocaleString('en-US');
+    return ctx.reply(`📌 *GROUP PINNED ANNOUNCEMENT*\n\n${pin.text}\n\n_Pinned: ${date}_`);
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  2) MEMBER NOTES — catatan admin tentang member tertentu
+//  2) MEMBER NOTES
 // ═══════════════════════════════════════════════════════════════════
 function notesStore() { return store('memberNotes', {}); }
 function noteKey(jid, target) { return `${jid}:${target}`; }
@@ -62,24 +63,24 @@ export async function noteAdd(ctx) {
     if (!requireAdmin(ctx)) return;
     const target = extractTarget(ctx);
     const text = ctx.body.split(' ').slice(1).join(' ').replace(/@\d+/, '').trim();
-    if (!target || !text) return ctx.reply('⚠️ Cara pakai: `.addnote @user [catatan]` atau reply pesan target + tulis catatannya.');
+    if (!target || !text) return ctx.reply('⚠️ Usage: `.addnote @user [note]` or reply to user message.');
     const data = notesStore();
     const key = noteKey(ctx.jid, target);
     data[key] = [...(data[key] || []), { text, by: ctx.sender, at: Date.now() }];
     save('memberNotes');
-    return ctx.reply(`✅ Catatan ditambahkan untuk \`${target.split('@')[0]}\`.\nTotal catatan: ${data[key].length}`);
+    return ctx.reply(`✅ Admin note saved for \`${target.split('@')[0]}\`.\nTotal notes: ${data[key].length}`);
 }
 
 export async function noteList(ctx) {
     if (!requireAdmin(ctx)) return;
     const target = extractTarget(ctx);
-    if (!target) return ctx.reply('⚠️ Cara pakai: `.listnote @user` atau reply pesan target.');
+    if (!target) return ctx.reply('⚠️ Usage: `.listnote @user` or reply to user message.');
     const data = notesStore();
     const list = data[noteKey(ctx.jid, target)] || [];
-    if (!list.length) return ctx.reply(`ℹ️ Belum ada catatan untuk \`${target.split('@')[0]}\`.`);
-    let txt = `📝 *CATATAN — ${target.split('@')[0]}*\n\n`;
+    if (!list.length) return ctx.reply(`ℹ️ No admin notes recorded for \`${target.split('@')[0]}\`.`);
+    let txt = `📝 *ADMIN NOTES — ${target.split('@')[0]}*\n\n`;
     list.forEach((n, i) => {
-        txt += `${i + 1}. ${n.text}\n   _oleh ${n.by.split('@')[0]}, ${new Date(n.at).toLocaleDateString('id-ID')}_\n`;
+        txt += `${i + 1}. ${n.text}\n   _by ${n.by.split('@')[0]}, ${new Date(n.at).toLocaleDateString('en-US')}_\n`;
     });
     return ctx.reply(txt);
 }
@@ -88,52 +89,51 @@ export async function noteDel(ctx) {
     if (!requireAdmin(ctx)) return;
     const target = extractTarget(ctx);
     const idx = parseInt(ctx.args[ctx.args.length - 1], 10);
-    if (!target || !idx) return ctx.reply('⚠️ Cara pakai: `.delnote @user [nomor]` (lihat nomornya lewat `.listnote`)');
+    if (!target || !idx) return ctx.reply('⚠️ Usage: `.delnote @user [note_number]` (check numbers via `.listnote`)');
     const data = notesStore();
     const key = noteKey(ctx.jid, target);
     const list = data[key] || [];
-    if (idx < 1 || idx > list.length) return ctx.reply('❌ Nomor catatan tidak valid.');
+    if (idx < 1 || idx > list.length) return ctx.reply('❌ Invalid note number.');
     list.splice(idx - 1, 1);
     data[key] = list;
     save('memberNotes');
-    return ctx.reply(`✅ Catatan #${idx} dihapus.`);
+    return ctx.reply(`✅ Note #${idx} deleted.`);
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  3) GROUP TEMPLATE — simpan/muat snapshot pengaturan grup (proteksi,
-//     lock, dsb — lihat lib/db.js getGroupSettings) dengan nama
+//  3) GROUP TEMPLATES
 // ═══════════════════════════════════════════════════════════════════
 function templateStore() { return store('groupTemplates', {}); }
 
 export async function templateSave(ctx) {
     if (!requireAdmin(ctx)) return;
     const name = ctx.args.join(' ').trim().toLowerCase();
-    if (!name) return ctx.reply('⚠️ Cara pakai: `.savetemplate [nama]`\n\nMenyimpan snapshot semua pengaturan proteksi & lock grup ini saat ini.');
+    if (!name) return ctx.reply('⚠️ Usage: `.savetemplate [template_name]`\n\nSaves current protection & configuration settings as a reusable template.');
     const settings = { ...getGroupSettings(ctx.jid) };
     const data = templateStore();
     data[name] = { settings, savedBy: ctx.sender, savedAt: Date.now(), groupName: name };
     save('groupTemplates');
-    return ctx.reply(`✅ Template *"${name}"* berhasil disimpan.\n\nMuat lagi kapan saja (di grup manapun) lewat \`.loadtemplate ${name}\`.`);
+    return ctx.reply(`✅ Template *"${name}"* saved successfully.\n\nApply to any group with \`.loadtemplate ${name}\`.`);
 }
 
 export async function templateLoad(ctx) {
     if (!requireAdmin(ctx)) return;
     const name = ctx.args.join(' ').trim().toLowerCase();
-    if (!name) return ctx.reply('⚠️ Cara pakai: `.loadtemplate [nama]`\nLihat daftar: `.listtemplate`');
+    if (!name) return ctx.reply('⚠️ Usage: `.loadtemplate [template_name]`\nView list: `.listtemplate`');
     const data = templateStore();
     const tpl = data[name];
-    if (!tpl) return ctx.reply('❌ Template dengan nama itu tidak ditemukan.');
+    if (!tpl) return ctx.reply('❌ Template with that name was not found.');
     updateGroupSettings(ctx.jid, tpl.settings);
-    return ctx.reply(`✅ Template *"${name}"* berhasil diterapkan ke grup ini.\n\nSemua pengaturan proteksi & lock sekarang mengikuti template tersebut.`);
+    return ctx.reply(`✅ Template *"${name}"* applied to this group.\n\nAll protection shields and configuration restored.`);
 }
 
 export async function templateList(ctx) {
     const data = templateStore();
     const names = Object.keys(data);
-    if (!names.length) return ctx.reply('ℹ️ Belum ada template tersimpan.\nBuat lewat `.savetemplate [nama]`.');
-    let txt = `📋 *DAFTAR TEMPLATE* — total ${names.length}\n\n`;
+    if (!names.length) return ctx.reply('ℹ️ No saved group templates found.\nCreate one with `.savetemplate [name]`.');
+    let txt = `📋 *SAVED GROUP TEMPLATES* — Total ${names.length}\n\n`;
     names.forEach((n, i) => {
-        txt += `${i + 1}. *${n}* — ${new Date(data[n].savedAt).toLocaleDateString('id-ID')}\n`;
+        txt += `${i + 1}. *${n}* — ${new Date(data[n].savedAt).toLocaleDateString('en-US')}\n`;
     });
     return ctx.reply(txt);
 }
@@ -142,37 +142,36 @@ export async function templateDel(ctx) {
     if (!requireAdmin(ctx)) return;
     const name = ctx.args.join(' ').trim().toLowerCase();
     const data = templateStore();
-    if (!data[name]) return ctx.reply('❌ Template tidak ditemukan.');
+    if (!data[name]) return ctx.reply('❌ Template not found.');
     delete data[name];
     save('groupTemplates');
-    return ctx.reply(`✅ Template *"${name}"* dihapus.`);
+    return ctx.reply(`✅ Template *"${name}"* deleted.`);
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  4) SCHEDULED ANNOUNCEMENT — pesan berulang harian jam tertentu
-//     (mirip jadwal buka/tutup, tapi buat teks bebas)
+//  4) SCHEDULED ANNOUNCEMENTS
 // ═══════════════════════════════════════════════════════════════════
 function announcementStore() { return store('groupAnnouncements', {}); }
 
 export async function announcementAdd(ctx) {
     if (!requireAdmin(ctx)) return;
     const match = ctx.body.match(/(\d{1,2}:\d{2})\s+([\s\S]+)/);
-    if (!match) return ctx.reply('⚠️ Cara pakai: `.addannouncement 08:00 Selamat pagi semua! Jangan lupa presensi.`');
+    if (!match) return ctx.reply('⚠️ Usage: `.addannouncement 08:00 Good morning everyone!`');
     const [, time, text] = match;
     const [h, m] = time.split(':').map(Number);
-    if (h > 23 || m > 59) return ctx.reply('❌ Format jam tidak valid (HH:MM, 00:00-23:59).');
+    if (h > 23 || m > 59) return ctx.reply('❌ Invalid time format (HH:MM in 24-hour clock).');
 
     const data = announcementStore();
     data[ctx.jid] = [...(data[ctx.jid] || []), { time, text: text.trim(), createdAt: Date.now() }];
     save('groupAnnouncements');
-    return ctx.reply(`✅ Pengumuman terjadwal ditambahkan, tiap hari jam *${time}*.\n\n_"${text.trim()}"_`);
+    return ctx.reply(`✅ Scheduled announcement added daily at *${time}*.\n\n_"${text.trim()}"_`);
 }
 
 export async function announcementList(ctx) {
     const data = announcementStore();
     const list = data[ctx.jid] || [];
-    if (!list.length) return ctx.reply('ℹ️ Belum ada pengumuman terjadwal di grup ini.');
-    let txt = `⏰ *PENGUMUMAN TERJADWAL*\n\n`;
+    if (!list.length) return ctx.reply('ℹ️ No scheduled announcements configured for this group.');
+    let txt = `⏰ *SCHEDULED ANNOUNCEMENTS*\n\n`;
     list.forEach((a, i) => { txt += `${i + 1}. *${a.time}* — ${a.text}\n`; });
     return ctx.reply(txt);
 }
@@ -182,15 +181,13 @@ export async function announcementDel(ctx) {
     const idx = parseInt(ctx.args[0], 10);
     const data = announcementStore();
     const list = data[ctx.jid] || [];
-    if (!idx || idx < 1 || idx > list.length) return ctx.reply('⚠️ Cara pakai: `.delannouncement [nomor]` (lihat nomornya lewat `.listannouncement`)');
+    if (!idx || idx < 1 || idx > list.length) return ctx.reply('⚠️ Usage: `.delannouncement [number]` (view with `.listannouncement`)');
     list.splice(idx - 1, 1);
     data[ctx.jid] = list;
     save('groupAnnouncements');
-    return ctx.reply(`✅ Pengumuman terjadwal #${idx} dihapus.`);
+    return ctx.reply(`✅ Scheduled announcement #${idx} deleted.`);
 }
 
-// Dipanggil dari index.js tiap menit (pola sama seperti group scheduler
-// buka/tutup) — cek semua grup, kirim pengumuman yang jamnya cocok SEKARANG.
 export function checkScheduledAnnouncements() {
     const data = announcementStore();
     const now = new Date();
@@ -207,21 +204,21 @@ export function checkScheduledAnnouncements() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  5) BIRTHDAY TRACKER — tanggal lahir member, dicek harian
+//  5) BIRTHDAY TRACKER
 // ═══════════════════════════════════════════════════════════════════
 function birthdayStore() { return store('memberBirthdays', {}); }
 
 export async function birthdaySet(ctx) {
     const dateStr = ctx.args[0];
     if (!dateStr || !/^\d{1,2}-\d{1,2}$/.test(dateStr)) {
-        return ctx.reply('⚠️ Cara pakai: `.setbirthday DD-MM`\nContoh: `.setbirthday 17-08`');
+        return ctx.reply('⚠️ Usage: `.setbirthday DD-MM`\nExample: `.setbirthday 25-12`');
     }
     const [day, month] = dateStr.split('-').map(Number);
-    if (day < 1 || day > 31 || month < 1 || month > 12) return ctx.reply('❌ Tanggal/bulan tidak valid.');
+    if (day < 1 || day > 31 || month < 1 || month > 12) return ctx.reply('❌ Invalid date/month values.');
     const data = birthdayStore();
     data[ctx.sender] = { day, month, setAt: Date.now() };
     save('memberBirthdays');
-    return ctx.reply(`✅ Tanggal lahir kamu disimpan: *${String(day).padStart(2, '0')}-${String(month).padStart(2, '0')}*`);
+    return ctx.reply(`✅ Your birthday has been saved: *${String(day).padStart(2, '0')}-${String(month).padStart(2, '0')}*`);
 }
 
 export async function birthdayList(ctx) {
@@ -231,8 +228,8 @@ export async function birthdayList(ctx) {
     const entries = Object.entries(data)
         .filter(([jid]) => !memberJids || memberJids.has(jid))
         .sort((a, b) => (a[1].month - b[1].month) || (a[1].day - b[1].day));
-    if (!entries.length) return ctx.reply('ℹ️ Belum ada member yang set tanggal lahir.\nSet punya kamu lewat `.setbirthday DD-MM`.');
-    let txt = `🎂 *DAFTAR ULANG TAHUN*\n\n`;
+    if (!entries.length) return ctx.reply('ℹ️ No member birthdays saved yet.\nRegister yours with `.setbirthday DD-MM`.');
+    let txt = `🎂 *GROUP BIRTHDAYS CALENDAR*\n\n`;
     entries.forEach(([jid, b]) => {
         txt += `• ${String(b.day).padStart(2, '0')}-${String(b.month).padStart(2, '0')} — \`${jid.split('@')[0]}\`\n`;
     });
@@ -241,14 +238,12 @@ export async function birthdayList(ctx) {
 
 export async function birthdayDel(ctx) {
     const data = birthdayStore();
-    if (!data[ctx.sender]) return ctx.reply('ℹ️ Kamu belum set tanggal lahir.');
+    if (!data[ctx.sender]) return ctx.reply('ℹ️ You have not saved your birthday yet.');
     delete data[ctx.sender];
     save('memberBirthdays');
-    return ctx.reply('✅ Tanggal lahir kamu dihapus dari data.');
+    return ctx.reply('✅ Your birthday has been removed.');
 }
 
-// Dipanggil dari index.js sekali sehari — return list member yang ulang
-// tahun HARI INI beserta grup mana saja mereka ada (buat auto-ucapan).
 export function checkTodayBirthdays() {
     const data = birthdayStore();
     const now = new Date();

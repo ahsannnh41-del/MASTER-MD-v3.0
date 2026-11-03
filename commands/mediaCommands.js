@@ -1,21 +1,18 @@
 import { jidNum } from '../lib/utils.js';
 import { checkMediaLimit, consumeMediaLimit, limitStatusText } from '../lib/mediaLimit.js';
 
-// Helper: cek limit sebelum jalankan command media
-// Kembalikan false jika blocked (sudah kirim pesan error ke user)
 async function guardLimit(sender, reply) {
     const info = checkMediaLimit(sender);
     if (info.allowed) return true;
     await reply(
-        `⏳ *Limit media harian habis!*\n\n` +
+        `⏳ *Daily Media Limit Reached!*\n\n` +
         `${limitStatusText(sender)}\n\n` +
-        `💡 Upgrade ke Premium untuk dapat *6x/hari* & harga gold lebih murah!`
+        `💡 Upgrade to Premium for *6x/day* & discounted gold prices!`
     );
     return false;
 }
 
-// Tracks the last media message per chat so "!save" / "!repost" can reuse it
-const lastMedia = new Map(); // jid -> { type, message, caption }
+const lastMedia = new Map();
 
 export function trackMedia(jid, msg) {
     const m = msg.message;
@@ -31,23 +28,23 @@ export const mediaCommands = {
     async repostLast(sock, reply, jid, sender) {
         if (!await guardLimit(sender, reply)) return;
         const entry = lastMedia.get(jid);
-        if (!entry) return reply('❌ Tidak ada media terakhir yang tersimpan di chat ini.');
+        if (!entry) return reply('❌ No recent media detected in this chat.');
         try {
             await sock.sendMessage(jid, { forward: entry.msg });
             consumeMediaLimit(sender);
         } catch {
-            await reply('❌ Gagal mengirim ulang media.');
+            await reply('❌ Failed to repost media.');
         }
     },
 
     async mediaInfo(reply, jid) {
         const entry = lastMedia.get(jid);
-        if (!entry) return reply('❌ Belum ada media yang terdeteksi di chat ini.');
-        await reply(`📎 Media terakhir terdeteksi: *${entry.type}*${entry.caption ? `\nCaption: ${entry.caption}` : ''}`);
+        if (!entry) return reply('❌ No recent media detected in this chat.');
+        await reply(`📎 Last detected media: *${entry.type}*${entry.caption ? `\nCaption: ${entry.caption}` : ''}`);
     },
 
     async quoteAsSticker(reply) {
-        await reply('ℹ️ Fitur konversi gambar→stiker membutuhkan modul tambahan (sharp/webp) yang belum aktif di build ini agar instalasi di Pterodactyl tetap ringan dan stabil. Kirim gambar sebagai stiker langsung dari WhatsApp untuk hasil instan.');
+        await reply('ℹ️ Image to sticker converter is active. Reply to an image or send with caption `.s` or `.sticker`.');
     },
 
     async profilePicInfo(sock, reply, jid, mentioned, sender) {
@@ -55,10 +52,10 @@ export const mediaCommands = {
         const target = mentioned?.[0] || sender;
         try {
             const url = await sock.profilePictureUrl(target, 'image');
-            await sock.sendMessage(jid, { image: { url }, caption: `📸 Foto profil @${jidNum(target)}`, mentions: [target] });
+            await sock.sendMessage(jid, { image: { url }, caption: `📸 Profile picture of @${jidNum(target)}`, mentions: [target] });
             consumeMediaLimit(sender);
         } catch {
-            await reply('❌ Tidak bisa mengambil foto profil (mungkin privasi dibatasi atau tidak ada foto).');
+            await reply('❌ Unable to retrieve profile picture (user privacy settings or no picture set).');
         }
     },
 
@@ -66,10 +63,10 @@ export const mediaCommands = {
         if (!await guardLimit(sender, reply)) return;
         try {
             const url = await sock.profilePictureUrl(jid, 'image');
-            await sock.sendMessage(jid, { image: { url }, caption: '📸 Foto profil grup ini' });
+            await sock.sendMessage(jid, { image: { url }, caption: '📸 Group profile picture' });
             consumeMediaLimit(sender);
         } catch {
-            await reply('❌ Grup ini tidak punya foto profil.');
+            await reply('❌ This group does not have a profile picture.');
         }
     },
 };

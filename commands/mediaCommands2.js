@@ -178,13 +178,89 @@ export async function squareCropCmd(ctx) {
 
 export async function watermarkCmd(ctx) {
     const text = ctx.args.join(' ').trim();
-    if (!text) return ctx.reply('📌 Cara pakai: reply gambar dengan caption *.watermark [teks]*');
+    if (!text) return ctx.reply('📌 Usage: reply to an image with caption *.watermark [text]*');
     const media = await getQuotedMediaBuffer(ctx, ['image']);
-    if (!media) return ctx.reply(NO_MEDIA_MSG('.watermark [teks]', 'gambar'));
+    if (!media) return ctx.reply(NO_MEDIA_MSG('.watermark [text]', 'image'));
     try {
         const result = await addWatermark(media.buffer, 'jpg', text);
         await ctx.sock.sendMessage(ctx.jid, { image: result }, { quoted: ctx.msg });
     } catch (err) {
-        await ctx.reply(`❌ Gagal: ${err.message}`);
+        await ctx.reply(`❌ Failed: ${err.message}`);
+    }
+}
+
+// ─── VIEW-ONCE RETRIEVER (.vv / .rvo / .readviewonce) ────────────────────────
+export async function handleViewOnce(ctx) {
+    const { sock, msg, jid, reply } = ctx;
+    const ctxInfo = msg.message?.extendedTextMessage?.contextInfo;
+    const quoted = ctxInfo?.quotedMessage;
+
+    if (!quoted) {
+        return reply(
+            `📌 *MASTER MD VIEW-ONCE RETRIEVER* 🔓\n\n` +
+            `Please *reply* to any View-Once photo, video, or voice note with:\n` +
+            `👉 *\`.vv\`* or *\`.rvo\`*\n\n` +
+            `The bot will retrieve and send it permanently!\n` +
+            `> 👑 Developer: AHSAN (03107260507)`
+        );
+    }
+
+    // Unwrap all nested viewOnce / ephemeral message wrappers
+    let inner = quoted;
+    if (inner?.viewOnceMessage?.message) inner = inner.viewOnceMessage.message;
+    if (inner?.viewOnceMessageV2?.message) inner = inner.viewOnceMessageV2.message;
+    if (inner?.viewOnceMessageV2Extension?.message) inner = inner.viewOnceMessageV2Extension.message;
+    if (inner?.ephemeralMessage?.message) inner = inner.ephemeralMessage.message;
+    if (inner?.documentWithCaptionMessage?.message) inner = inner.documentWithCaptionMessage.message;
+
+    const isImage = !!inner?.imageMessage;
+    const isVideo = !!inner?.videoMessage;
+    const isAudio = !!inner?.audioMessage;
+
+    if (!isImage && !isVideo && !isAudio) {
+        return reply('❌ The replied message does not contain any View-Once media (photo/video/voice)!');
+    }
+
+    try {
+        const { downloadMediaMessage } = await import('@whiskeysockets/baileys');
+
+        const mediaType = isImage ? 'image' : (isVideo ? 'video' : 'audio');
+        const mediaObj = inner[`${mediaType}Message`];
+        const caption = mediaObj?.caption || `🔓 *View-Once Retrieved by MASTER MD*\n👑 *Developer:* AHSAN (03107260507)`;
+
+        const fakeTargetMsg = {
+            key: {
+                remoteJid: jid,
+                id: ctxInfo.stanzaId,
+                participant: ctxInfo.participant
+            },
+            message: inner
+        };
+
+        const buffer = await downloadMediaMessage(
+            fakeTargetMsg,
+            'buffer',
+            {},
+            { reuploadRequest: sock.updateMediaMessage }
+        );
+
+        if (!buffer || !buffer.length) {
+            return reply('❌ Could not retrieve media buffer. The View-Once file may have expired on WhatsApp servers.');
+        }
+
+        if (isImage) {
+            await sock.sendMessage(jid, { image: buffer, caption }, { quoted: msg });
+        } else if (isVideo) {
+            await sock.sendMessage(jid, { video: buffer, caption }, { quoted: msg });
+        } else if (isAudio) {
+            await sock.sendMessage(jid, {
+                audio: buffer,
+                mimetype: mediaObj.mimetype || 'audio/ogg; codecs=opus',
+                ptt: mediaObj.ptt || false
+            }, { quoted: msg });
+        }
+    } catch (err) {
+        console.error('[ViewOnce Error]:', err.message);
+        return reply(`❌ Error retrieving View-Once: ${err.message}`);
     }
 }

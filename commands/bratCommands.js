@@ -146,8 +146,8 @@ export async function bratGenerate(ctx, variant = 'brat') {
     const text = args?.join(' ') || '';
     if (!text) {
         return reply(
-            `📌 Cara pakai: \`${PREFIX}${variant} <teks>\`\n` +
-            `Contoh: \`${PREFIX}${variant} selow lah\``
+            `📌 Usage: \`${PREFIX}${variant} <text>\`\n` +
+            `Example: \`${PREFIX}${variant} Stay humble\``
         );
     }
 
@@ -155,21 +155,15 @@ export async function bratGenerate(ctx, variant = 'brat') {
 }
 
 // ── Variant GAMBAR: brat (default) / bratgreen / bratwhite ─────────
-// .brat & .bratwhite: coba fetchBratFromApi() (endpoint luar) DULU, baru
-// fallback ke renderBratImage() lokal (ffmpeg, lib/bratRender.js) kalau
-// gagal. .bratgreen: lokal saja (lihat UPDATE 2026-07-25 di atas).
 async function bratGenerateImage(ctx, variant, text) {
     const { sock, jid, msg, reply } = ctx;
     try {
-        // Brat memakai REST API publik tanpa API key. Tidak ada fallback
-        // drawtext/ffmpeg, sehingga error "No such filter: drawtext" tidak
-        // bisa lagi menjatuhkan fitur ini.
         const raw = await fetchBratFromApi(text);
-        if (!raw || raw.length < 100) throw new Error('API mengembalikan gambar kosong.');
+        if (!raw || raw.length < 100) throw new Error('API returned an empty sticker image.');
         const sticker = await imageToWebpSticker(raw);
         await sock.sendMessage(jid, { sticker }, { quoted: msg });
     } catch (err) {
-        await reply(`❌ Gagal generate brat: ${String(err.message || 'API gagal').slice(0, 220)}\n\nCoba lagi beberapa saat.`);
+        await reply(`❌ Failed to generate brat sticker: ${String(err.message || 'API error').slice(0, 220)}\n\nPlease try again shortly.`);
     }
 }
 
@@ -181,13 +175,13 @@ export async function iqc(ctx) {
     if (!text) {
         return reply(
             `📱 *iPhone Quote Creator*\n\n` +
-            `Buat gambar quote bergaya iMessage/iPhone.\n\n` +
-            `📌 Cara: \`${PREFIX}iqc <teks>\`\n` +
-            `Contoh: \`${PREFIX}iqc Gojo terkuat sejagad raya\``
+            `Generate an aesthetic iMessage/iPhone quote screenshot.\n\n` +
+            `📌 Usage: \`${PREFIX}iqc <text>\`\n` +
+            `Example: \`${PREFIX}iqc Build in silence, let success make the noise\``
         );
     }
 
-    await reply('⏳ Membuat iPhone quote...');
+    await reply('⏳ Creating iPhone quote screenshot...');
 
     try {
         const url = `${FAA_BASE}/faa/iqc?prompt=${encodeURIComponent(text)}`;
@@ -198,9 +192,10 @@ export async function iqc(ctx) {
             caption:
                 `📱 *iPhone Quote Creator*\n\n` +
                 `_"${text}"_\n\n` +
-                `> Dibuat dengan ${PREFIX}iqc`,
+                `👑 Developer: AHSAN (03107260507)\n` +
+                `> Created with ${PREFIX}iqc`,
         }, { quoted: msg });
     } catch (err) {
-        await reply(`❌ Gagal membuat IQC: ${err.message}\n\nCoba lagi beberapa saat.`);
+        await reply(`❌ Failed to create iPhone quote: ${err.message}\n\nPlease try again shortly.`);
     }
 }

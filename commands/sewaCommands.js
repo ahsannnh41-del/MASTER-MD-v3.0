@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════
-//  SEWACOMMANDS.JS — Sistem Sewa Bot per Grup
+//  SEWACOMMANDS.JS — Bot Group Rental & Authorization System
+//  Developer: AHSAN (03107260507)
 // ═══════════════════════════════════════════════════════════════════
 
 import {
@@ -11,76 +12,62 @@ import settings from '../setting.js';
 
 const P = settings.prefix || '.';
 
-// Helper: resolve JID grup dari link atau JID langsung
 function resolveGroupJid(input) {
     if (!input) return null;
-    // Ambil kode invite dari link
     const linkMatch = input.match(/chat\.whatsapp\.com\/([A-Za-z0-9]+)/);
-    if (linkMatch) return linkMatch[1]; // return invite code (perlu join dulu)
-
-    // Sudah berbentuk JID
+    if (linkMatch) return linkMatch[1];
     if (input.includes('@g.us')) return input;
-
-    // Nomor murni → tambah suffix
     const clean = input.replace(/[^0-9]/g, '');
     if (clean.length > 10) return `${clean}@g.us`;
-
     return null;
 }
 
 export const sewaCommands = {
 
     // ── .sewa ─────────────────────────────────────────────────────
-    // Penggunaan: .sewa [link/jid grup] [durasi]
-    // Di dalam grup: .sewa 7hari   (tanpa link → pakai jid grup saat ini)
     async sewa(ctx) {
         if (!ctx.isOwner) {
-            return ctx.reply('❌ Hanya *Owner/Creator* yang bisa mengatur sewa bot.');
+            return ctx.reply('❌ Only the *Bot Owner/Creator* can configure bot rentals.');
         }
 
         const { args, jid, isGroup } = ctx;
-
-        // Parse argumen — bisa: .sewa 7hari  atau  .sewa <link> 7hari
         let targetJid = null;
         let durasiStr = null;
 
         if (args.length === 0) {
             return ctx.reply(
-                `📋 *SISTEM SEWA BOT*\n\n` +
-                `*Cara pakai:*\n` +
-                `• Di grup langsung: \`${P}sewa 7hari\`\n` +
-                `• Dari DM: \`${P}sewa [link/jid grup] [durasi]\`\n\n` +
-                `*Format durasi:*\n` +
-                `┣ \`1hari\` / \`7hari\` / \`30hari\`\n` +
-                `┣ \`1minggu\` / \`2minggu\`\n` +
-                `┣ \`1bulan\` / \`3bulan\`\n` +
-                `┣ \`1tahun\`\n` +
-                `┗ \`selamanya\` / \`permanent\`\n\n` +
-                `*Contoh:*\n` +
-                `\`${P}sewa 7hari\` ← di grup\n` +
-                `\`${P}sewa https://chat.whatsapp.com/xxx 1bulan\``
+                `📋 *BOT GROUP RENTAL SYSTEM*\n\n` +
+                `*How to use:*\n` +
+                `• Inside a group: \`${P}sewa 7days\`\n` +
+                `• From private chat: \`${P}sewa [group_link/jid] [duration]\`\n\n` +
+                `*Duration formats:*\n` +
+                `┣ \`1day\` / \`7days\` / \`30days\` / \`7hari\`\n` +
+                `┣ \`1week\` / \`2weeks\` / \`1minggu\`\n` +
+                `┣ \`1month\` / \`3months\` / \`1bulan\`\n` +
+                `┣ \`1year\` / \`1tahun\`\n` +
+                `┗ \`permanent\` / \`selamanya\`\n\n` +
+                `*Examples:*\n` +
+                `\`${P}sewa 7days\` (inside group)\n` +
+                `\`${P}sewa https://chat.whatsapp.com/xxx 1month\``
             );
         }
 
         if (args.length === 1) {
-            // Satu arg: bisa jadi durasi (kalau di grup) atau link saja
             if (isGroup && parseDurasi(args[0])) {
                 targetJid = jid;
                 durasiStr = args[0];
             } else {
-                return ctx.reply(`❌ Kurang argumen.\nContoh: \`${P}sewa 7hari\` (di grup) atau \`${P}sewa <link> 7hari\``);
+                return ctx.reply(`❌ Incomplete arguments.\nExample: \`${P}sewa 7days\` (in group) or \`${P}sewa <link> 7days\``);
             }
         } else {
-            // Dua arg atau lebih: arg[0] = link/jid, arg[1] = durasi
             targetJid = resolveGroupJid(args[0]);
             durasiStr = args.slice(1).join('');
             if (!targetJid) {
-                // Mungkin args[0] adalah durasi dan dipanggil dari grup
                 if (isGroup && parseDurasi(args[0])) {
                     targetJid = jid;
                     durasiStr = args[0];
                 } else {
-                    return ctx.reply('❌ Format link/JID grup tidak dikenali.');
+                    return ctx.reply('❌ Unrecognized group link or JID format.');
                 }
             }
         }
@@ -95,15 +82,15 @@ export const sewaCommands = {
 
         const isPerp = result.perpanjang;
         const selesaiText = result.selesaiTs === Infinity
-            ? 'Selamanya ♾️'
+            ? 'Permanent ♾️'
             : fmtTgl(result.selesaiTs);
 
         await ctx.reply(
-            `${isPerp ? '🔄 *Sewa Diperpanjang*' : '✅ *Sewa Bot Berhasil Diatur*'}\n\n` +
-            `🏘️ Grup  : \`${targetJid}\`\n` +
-            `⏱️ Durasi: *${result.label}*\n` +
-            `📅 Sampai: *${selesaiText}*\n\n` +
-            `> Ketik \`${P}ceksewa\` di grup untuk cek status.`
+            `${isPerp ? '🔄 *Rental Extended*' : '✅ *Bot Group Rental Configured*'}\n\n` +
+            `🏘️ Group   : \`${targetJid}\`\n` +
+            `⏱️ Duration: *${result.label}*\n` +
+            `📅 Valid until: *${selesaiText}*\n\n` +
+            `> Type \`${P}ceksewa\` in the group to check status.`
         );
     },
 
@@ -114,9 +101,10 @@ export const sewaCommands = {
 
         if (!data) {
             return ctx.reply(
-                `📋 *Status Sewa Bot*\n\n` +
-                `❌ Grup ini *belum* memiliki sewa bot aktif.\n\n` +
-                `> Hubungi owner untuk menyewa bot.`
+                `📋 *Bot Rental Status*\n\n` +
+                `❌ This group *does not* have an active bot rental or authorization.\n\n` +
+                `👑 Developer: AHSAN (03107260507)\n` +
+                `> Contact Owner to authorize or rent the bot for this group.`
             );
         }
 
@@ -124,46 +112,45 @@ export const sewaCommands = {
         const sisa  = sisaWaktu(data.selesai);
 
         await ctx.reply(
-            `📋 *Status Sewa Bot*\n\n` +
-            `${aktif ? '✅ *AKTIF*' : '⛔ *SUDAH HABIS*'}\n\n` +
-            `🏘️ Grup    : \`${targetJid}\`\n` +
-            `📅 Mulai   : ${fmtTgl(data.mulai)}\n` +
-            `📅 Selesai : ${fmtTgl(data.selesai)}\n` +
-            `⏱️ Durasi  : ${data.durasi}\n` +
-            `⌛ Sisa    : *${sisa}*\n` +
-            `${data.diperpanjang > 0 ? `🔄 Diperpanjang: ${data.diperpanjang}x\n` : ''}` +
-            `${data.catatan ? `📝 Catatan: ${data.catatan}\n` : ''}`
+            `📋 *Bot Rental Status*\n\n` +
+            `${aktif ? '✅ *ACTIVE & AUTHORIZED*' : '⛔ *EXPIRED*'}\n\n` +
+            `🏘️ Group      : \`${targetJid}\`\n` +
+            `📅 Start Date : ${fmtTgl(data.mulai)}\n` +
+            `📅 End Date   : ${fmtTgl(data.selesai)}\n` +
+            `⏱️ Duration   : ${data.durasi}\n` +
+            `⌛ Remaining  : *${sisa}*\n` +
+            `${data.diperpanjang > 0 ? `🔄 Extensions: ${data.diperpanjang}x\n` : ''}` +
+            `${data.catatan ? `📝 Notes: ${data.catatan}\n` : ''}`
         );
     },
 
     // ── .delsewa ──────────────────────────────────────────────────
     async delsewa(ctx, sock) {
-        if (!ctx.isOwner) return ctx.reply('❌ Hanya *Owner/Creator* yang bisa menghapus sewa.');
+        if (!ctx.isOwner) return ctx.reply('❌ Only the *Bot Owner/Creator* can remove group rentals.');
 
         const targetJid = ctx.args?.[0] ? resolveGroupJid(ctx.args[0]) : ctx.jid;
-        if (!targetJid) return ctx.reply(`📌 Cara: \`${P}delsewa [link/jid]\` atau jalankan di grup.`);
+        if (!targetJid) return ctx.reply(`📌 Usage: \`${P}delsewa [link/jid]\` or run directly inside group.`);
 
         const deleted = delSewa(targetJid);
-        if (!deleted) return ctx.reply(`❌ Tidak ada data sewa untuk grup \`${targetJid}\`.`);
+        if (!deleted) return ctx.reply(`❌ No active rental found for group \`${targetJid}\`.`);
 
-        // Keluar dari grup kalau bot ada di sana
         try {
             await sock?.sendMessage(targetJid, {
-                text: '⚠️ Sewa bot untuk grup ini telah dihapus oleh owner. Bot akan keluar. Terima kasih!'
+                text: '⚠️ Bot rental for this group has been revoked by Owner. The bot is now leaving. Thank you!'
             });
             await new Promise(r => setTimeout(r, 2000));
             await sock?.groupLeave(targetJid).catch(() => {});
-        } catch { /* abaikan kalau tidak di grup */ }
+        } catch {}
 
-        await ctx.reply(`✅ Sewa grup \`${targetJid}\` berhasil dihapus dan bot telah keluar dari grup tersebut.`);
+        await ctx.reply(`✅ Rental for group \`${targetJid}\` removed successfully and bot left group.`);
     },
 
     // ── .listsewa ─────────────────────────────────────────────────
     async listsewa(ctx) {
-        if (!ctx.isOwner) return ctx.reply('❌ Hanya *Owner/Creator* yang bisa melihat daftar sewa.');
+        if (!ctx.isOwner) return ctx.reply('❌ Only the *Bot Owner/Creator* can view the rental directory.');
 
-        const list = listSewa(false); // semua, termasuk expired
-        if (list.length === 0) return ctx.reply('📋 Belum ada data sewa.');
+        const list = listSewa(false);
+        if (list.length === 0) return ctx.reply('📋 No rental records found in database.');
 
         const active  = list.filter(s => isSewaActive(s.jid));
         const expired = list.filter(s => !isSewaActive(s.jid));
@@ -171,20 +158,20 @@ export const sewaCommands = {
         const fmt = (s) =>
             `• \`${s.jid.split('@')[0]}\` — ${s.durasi} — ⌛ ${sisaWaktu(s.selesai)}`;
 
-        let msg = `📋 *DAFTAR SEWA BOT*\n\n`;
-        if (active.length)  msg += `✅ *Aktif (${active.length}):*\n${active.map(fmt).join('\n')}\n\n`;
+        let msg = `📋 *BOT GROUP RENTALS DIRECTORY*\n\n`;
+        if (active.length)  msg += `✅ *Active (${active.length}):*\n${active.map(fmt).join('\n')}\n\n`;
         if (expired.length) msg += `⛔ *Expired (${expired.length}):*\n${expired.map(fmt).join('\n')}`;
 
         await ctx.reply(msg);
     },
 
-    // ── .extsewa (perpanjang) ─────────────────────────────────────
+    // ── .extsewa (extend) ─────────────────────────────────────────
     async extsewa(ctx) {
-        if (!ctx.isOwner) return ctx.reply('❌ Hanya *Owner/Creator* yang bisa perpanjang sewa.');
+        if (!ctx.isOwner) return ctx.reply('❌ Only the *Bot Owner/Creator* can extend rentals.');
 
         const { args, jid, isGroup } = ctx;
         if (args.length === 0) {
-            return ctx.reply(`📌 Cara: \`${P}extsewa [link] [durasi]\` atau \`${P}extsewa 7hari\` di grup.`);
+            return ctx.reply(`📌 Usage: \`${P}extsewa [link] [duration]\` or \`${P}extsewa 7days\` inside group.`);
         }
 
         let targetJid = null, durasiStr = null;
@@ -194,19 +181,19 @@ export const sewaCommands = {
             targetJid = resolveGroupJid(args[0]);
             durasiStr = args.slice(1).join('');
         }
-        if (!targetJid || !durasiStr) return ctx.reply('❌ Format tidak lengkap.');
+        if (!targetJid || !durasiStr) return ctx.reply('❌ Incomplete duration format.');
 
         const existing = getSewa(targetJid);
-        if (!existing) return ctx.reply(`❌ Grup ini belum punya sewa aktif. Gunakan \`${P}sewa\` terlebih dahulu.`);
+        if (!existing) return ctx.reply(`❌ Group does not have an active rental. Use \`${P}sewa\` first.`);
 
         const result = addSewa(targetJid, { penyewaJid: ctx.sender, durasi: durasiStr });
         if (!result.ok) return ctx.reply(`❌ ${result.reason}`);
 
         await ctx.reply(
-            `🔄 *Sewa Diperpanjang*\n\n` +
-            `⏱️ Ditambah: *+${result.label}*\n` +
-            `📅 Selesai baru: *${fmtTgl(result.selesaiTs)}*\n` +
-            `⌛ Sisa: *${sisaWaktu(result.selesaiTs)}*`
+            `🔄 *Rental Extended*\n\n` +
+            `⏱️ Added: *+${result.label}*\n` +
+            `📅 New End Date: *${fmtTgl(result.selesaiTs)}*\n` +
+            `⌛ Remaining: *${sisaWaktu(result.selesaiTs)}*`
         );
     },
 
@@ -215,34 +202,24 @@ export const sewaCommands = {
         const harga = getHargaSewa();
 
         await ctx.reply(
-            `💰 *HARGA SEWA BOT*\n` +
-            `━━━━━━━━━━━━━━━━\n\n` +
+            `💰 *MASTER MD RENTAL PLANS*\n` +
+            `━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
             `${harga ? `${harga}\n\n` : ''}` +
-            `⏱️ *Durasi BEBAS* — mau 10 detik atau 10 tahun, semua bisa!\n\n` +
-            `*Format durasi:*\n` +
-            `┣ \`10detik\` / \`30s\`\n` +
-            `┣ \`5menit\` / \`30min\`\n` +
-            `┣ \`1jam\` / \`6h\`\n` +
-            `┣ \`1hari\` / \`7hari\` / \`30hari\`\n` +
-            `┣ \`1minggu\` / \`2minggu\`\n` +
-            `┣ \`1bulan\` / \`3bulan\`\n` +
-            `┣ \`1tahun\`\n` +
-            `┗ \`selamanya\` / \`permanent\`\n\n` +
-            `*Contoh:*\n` +
-            `\`${P}sewa 30menit\`\n` +
-            `\`${P}sewa 7hari\`\n` +
-            `\`${P}sewa selamanya\`\n\n` +
-            `📞 Hubungi owner untuk info harga & pembayaran.\n\n` +
-            `> Ketik \`${P}ceksewa\` untuk cek status sewa grupmu.`
+            `⏱️ *Custom Durations Available* — Any duration from days to permanent access!\n\n` +
+            `*Supported durations:*\n` +
+            `┣ \`7days\` / \`14days\` / \`30days\`\n` +
+            `┣ \`1month\` / \`3months\` / \`6months\`\n` +
+            `┣ \`1year\` / \`permanent\`\n\n` +
+            `👑 *Contact Developer:* AHSAN (03107260507)\n` +
+            `📢 *Official Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46\n\n` +
+            `> Type \`${P}ceksewa\` to check your group's current authorization.`
         );
     },
 
     // ── .gantihargasewa ─────────────────────────────────────────────
-    // Owner mengatur teks harga yang tampil di .hargasewa.
-    // Penggunaan: .gantihargasewa <teks harga baru>
     async gantihargasewa(ctx) {
         if (!ctx.isOwner) {
-            return ctx.reply('❌ Hanya *Owner/Creator* yang bisa mengubah harga sewa.');
+            return ctx.reply('❌ Only the *Bot Owner/Creator* can update rental pricing.');
         }
 
         const teks = ctx.args?.join(' ').trim();
@@ -250,13 +227,13 @@ export const sewaCommands = {
 
         if (!teks) {
             return ctx.reply(
-                `📌 *Ubah Harga Sewa*\n\n` +
-                `Harga saat ini:\n${current ? current : '_(belum diatur)_'}\n\n` +
-                `*Cara pakai:*\n` +
-                `\`${P}gantihargasewa <teks harga baru>\`\n\n` +
-                `*Contoh:*\n` +
-                `\`${P}gantihargasewa 7 Hari: Rp10.000 | 30 Hari: Rp30.000 | Selamanya: Rp100.000\`\n\n` +
-                `> Kirim \`-\` sebagai teks untuk mengosongkan kembali harga.`
+                `📌 *Update Rental Pricing*\n\n` +
+                `Current text:\n${current ? current : '_(not set)_'}\n\n` +
+                `*Usage:*\n` +
+                `\`${P}gantihargasewa <new pricing text>\`\n\n` +
+                `*Example:*\n` +
+                `\`${P}gantihargasewa 7 Days: $2 | 30 Days: $5 | Permanent: $15\`\n\n` +
+                `> Send \`-\` to reset pricing text.`
             );
         }
 
@@ -264,22 +241,22 @@ export const sewaCommands = {
 
         await ctx.reply(
             teks === '-'
-                ? `✅ Harga sewa berhasil dikosongkan.\n\n> Ketik \`${P}hargasewa\` untuk lihat tampilannya.`
-                : `✅ *Harga Sewa Diperbarui*\n\n${teks}\n\n> Ketik \`${P}hargasewa\` untuk lihat tampilannya.`
+                ? `✅ Rental pricing text cleared.\n\n> Type \`${P}hargasewa\` to view.`
+                : `✅ *Rental Pricing Updated*\n\n${teks}\n\n> Type \`${P}hargasewa\` to view.`
         );
     },
 
     // ── .sewamode on/off ──────────────────────────────────────────
-    // Kalau ON: hanya grup bersewa yang bisa pakai bot
     async sewamode(ctx) {
-        if (!ctx.isOwner) return ctx.reply('❌ Hanya *Owner/Creator* yang bisa mengatur sewa mode.');
+        if (!ctx.isOwner) return ctx.reply('❌ Only the *Bot Owner/Creator* can toggle rental mode.');
+
         const arg = (ctx.args?.[0] || '').toLowerCase();
         if (!['on', 'off'].includes(arg)) {
             return ctx.reply(
-                `📌 *Sewa Mode*\n\n` +
+                `📌 *Rental Mode*\n\n` +
                 `Status: *${isSewaMode() ? '✅ ON' : '❌ OFF'}*\n\n` +
-                `• ON = hanya grup bersewa yang bisa pakai bot\n` +
-                `• OFF = semua grup bisa pakai (mode bebas)\n\n` +
+                `• ON = Only rented/authorized groups can use the bot\n` +
+                `• OFF = Public mode (all groups can use the bot)\n\n` +
                 `\`${P}sewamode on\` / \`${P}sewamode off\``
             );
         }
@@ -287,8 +264,8 @@ export const sewaCommands = {
         setSewaMode(val);
         await ctx.reply(
             val
-                ? `✅ *Sewa Mode ON* — bot sekarang hanya aktif di grup yang bersewa.`
-                : `❌ *Sewa Mode OFF* — bot aktif di semua grup.`
+                ? `✅ *Rental Mode ON* — Bot now only responds in authorized/rented groups.`
+                : `❌ *Rental Mode OFF* — Bot is active in all groups (public mode).`
         );
     },
 };

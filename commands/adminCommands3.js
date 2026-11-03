@@ -5,27 +5,19 @@ import { recallRealJid } from '../lib/lidMapping.js';
 
 function isAdminCheck(isAdmin, reply) {
     if (isAdmin === undefined || isAdmin === null) {
-        reply('❌ Command ini hanya bisa digunakan di dalam *grup*!');
+        reply('❌ This command can only be used inside a *group*!');
         return false;
     }
     if (!isAdmin) {
-        reply('❌ Hanya *admin grup* yang bisa menggunakan command ini!\n\n_Owner/Creator bot tidak dihitung kalau tidak jadi admin di grup ini._');
+        reply('❌ Only *group admins* can use this command!\n\n_Bot Owner/Creator must also be an admin in this group to run admin tools._');
         return false;
     }
     return true;
 }
 
-// Threshold default "berapa lama tidak chat = sider": 3 hari.
-// Bisa di-override per pemanggilan lewat ".sider [jumlah][s/m/h/d]",
-// contoh ".sider 7d" (7 hari) atau ".sider 12h" (12 jam) — TIDAK
-// disimpan permanen, cuma berlaku untuk pengecekan saat itu saja,
-// supaya admin bebas coba-coba threshold tanpa mengubah setting grup.
+// Inactivity threshold (default: 3 days)
 const DEFAULT_SIDER_THRESHOLD_MS = 3 * 24 * 60 * 60 * 1000;
 
-// Resolusi JID @lid -> nomor asli (best-effort) khusus untuk tampilan,
-// dengan fallback ke JID @lid mentah kalau memang belum pernah ketahuan
-// nomor aslinya (lihat lib/lidMapping.js & utils.js untuk penjelasan
-// lengkap soal kenapa @lid butuh penanganan khusus di bot ini).
 function displayJid(jid) {
     if (jid.includes('@lid')) {
         const real = recallRealJid(jid);
@@ -42,15 +34,15 @@ function getPolls(jid) {
 
 export const adminCommands3 = {
 
-    // ─── POLLING SEDERHANA (teks) ───────────────────────────────────────────
+    // ─── SIMPLE GROUP POLLS ──────────────────────────────────────────────────
     async createPoll(reply, jid, args, isAdmin) {
         if (!isAdminCheck(isAdmin, reply)) return;
         const text = args.join(' ');
         if (!text || !text.includes('|')) {
-            return reply('📌 Cara pakai: *.poll [pertanyaan] | [opsi1] | [opsi2] | ...*\nContoh: .poll Makan apa? | Nasi | Mie | Roti');
+            return reply('📌 Usage: *.poll [question] | [option1] | [option2] | ...*\nExample: .poll Favorite language? | JavaScript | Python | Rust');
         }
         const [question, ...options] = text.split('|').map(s => s.trim()).filter(Boolean);
-        if (options.length < 2) return reply('❌ Minimal 2 opsi diperlukan!');
+        if (options.length < 2) return reply('❌ At least 2 options are required!');
 
         const polls = getPolls(jid);
         const poll = { id: polls.length + 1, question, options, votes: {}, createdAt: Date.now() };
@@ -58,68 +50,68 @@ export const adminCommands3 = {
         save('groupPolls');
 
         const optText = options.map((o, i) => `${i + 1}. ${o}`).join('\n');
-        await reply(`📊 *POLLING #${poll.id}*\n\n*${question}*\n\n${optText}\n\nVote dengan: *.vote ${poll.id} [nomor]*`);
+        await reply(`📊 *GROUP POLL #${poll.id}*\n\n*${question}*\n\n${optText}\n\nVote using: *.vote ${poll.id} [option_number]*`);
     },
 
     async votePoll(reply, jid, sender, args) {
         const pollId = parseInt(args[0]);
         const choice = parseInt(args[1]);
-        if (!pollId || !choice) return reply('📌 Cara pakai: *.vote [id_poll] [nomor_opsi]*');
+        if (!pollId || !choice) return reply('📌 Usage: *.vote [poll_id] [option_number]*');
 
         const polls = getPolls(jid);
         const poll = polls.find(p => p.id === pollId);
-        if (!poll) return reply('❌ Polling dengan ID itu tidak ditemukan.');
-        if (choice < 1 || choice > poll.options.length) return reply(`❌ Pilih nomor 1-${poll.options.length}!`);
+        if (!poll) return reply('❌ Poll with that ID was not found.');
+        if (choice < 1 || choice > poll.options.length) return reply(`❌ Please choose a number from 1 to ${poll.options.length}!`);
 
         poll.votes[sender] = choice;
         save('groupPolls');
-        await reply(`✅ Vote kamu untuk *"${poll.options[choice - 1]}"* tercatat!`);
+        await reply(`✅ Your vote for *"${poll.options[choice - 1]}"* has been recorded!`);
     },
 
     async pollResult(reply, jid, args) {
         const pollId = parseInt(args[0]);
-        if (!pollId) return reply('📌 Cara pakai: *.hasilpoll [id_poll]*');
+        if (!pollId) return reply('📌 Usage: *.pollresult [poll_id]*');
 
         const polls = getPolls(jid);
         const poll = polls.find(p => p.id === pollId);
-        if (!poll) return reply('❌ Polling dengan ID itu tidak ditemukan.');
+        if (!poll) return reply('❌ Poll with that ID was not found.');
 
         const counts = poll.options.map((_, i) => Object.values(poll.votes).filter(v => v === i + 1).length);
         const total = counts.reduce((a, b) => a + b, 0) || 1;
         const lines = poll.options.map((o, i) => {
             const pct = ((counts[i] / total) * 100).toFixed(0);
-            return `${o}: ${counts[i]} suara (${pct}%)`;
+            return `${o}: ${counts[i]} votes (${pct}%)`;
         });
 
-        await reply(`📊 *HASIL POLLING #${pollId}*\n\n*${poll.question}*\n\n${lines.join('\n')}\n\nTotal voter: ${Object.keys(poll.votes).length}`);
+        await reply(`📊 *POLL RESULTS #${pollId}*\n\n*${poll.question}*\n\n${lines.join('\n')}\n\nTotal voters: ${Object.keys(poll.votes).length}`);
     },
 
     async listPolls(reply, jid) {
         const polls = getPolls(jid);
-        if (!polls.length) return reply('📋 Belum ada polling di grup ini.');
+        if (!polls.length) return reply('📋 No active polls found in this group.');
         const lines = polls.slice(-10).map(p => `#${p.id} — ${p.question}`);
-        await reply(`📋 *DAFTAR POLLING (10 terakhir)*\n\n${lines.join('\n')}`);
+        await reply(`📋 *RECENT POLLS (Last 10)*\n\n${lines.join('\n')}`);
     },
 
-    // ─── JADWAL GRUP SEDERHANA ───────────────────────────────────────────────
+    // ─── GROUP SCHEDULES ─────────────────────────────────────────────────────
     async addSchedule(reply, jid, args, isAdmin) {
         if (!isAdminCheck(isAdmin, reply)) return;
         const text = args.join(' ');
-        if (!text) return reply('📌 Cara pakai: *.addjadwal [teks jadwal/acara]*');
+        if (!text) return reply('📌 Usage: *.addschedule [schedule/event details]*');
 
         const data = store('groupSchedule');
         if (!data[jid]) data[jid] = [];
         data[jid].push({ text, ts: Date.now() });
         save('groupSchedule');
-        await reply(`✅ Jadwal ditambahkan (#${data[jid].length}).`);
+        await reply(`✅ Schedule entry added (#${data[jid].length}).`);
     },
 
     async listSchedule(reply, jid) {
         const data = store('groupSchedule');
         const items = data[jid] || [];
-        if (!items.length) return reply('📅 Belum ada jadwal tersimpan di grup ini.');
+        if (!items.length) return reply('📅 No schedules saved in this group.');
         const lines = items.map((it, i) => `${i + 1}. ${it.text}`);
-        await reply(`📅 *JADWAL GRUP*\n\n${lines.join('\n')}`);
+        await reply(`📅 *GROUP SCHEDULES*\n\n${lines.join('\n')}`);
     },
 
     async deleteSchedule(reply, jid, args, isAdmin) {
@@ -127,31 +119,31 @@ export const adminCommands3 = {
         const idx = parseInt(args[0]) - 1;
         const data = store('groupSchedule');
         const items = data[jid] || [];
-        if (isNaN(idx) || idx < 0 || idx >= items.length) return reply('📌 Cara pakai: *.deljadwal [nomor]*');
+        if (isNaN(idx) || idx < 0 || idx >= items.length) return reply('📌 Usage: *.delschedule [entry_number]*');
         items.splice(idx, 1);
         save('groupSchedule');
-        await reply('✅ Jadwal berhasil dihapus.');
+        await reply('✅ Schedule entry deleted successfully.');
     },
 
-    // ─── REPORT / LAPOR KE ADMIN ────────────────────────────────────────────
+    // ─── REPORTS TO ADMINS ───────────────────────────────────────────────────
     async reportToAdmin(reply, jid, sender, args) {
         const text = args.join(' ');
-        if (!text) return reply('📌 Cara pakai: *.lapor [isi laporan]*\nLaporan akan disimpan untuk ditinjau admin.');
+        if (!text) return reply('📌 Usage: *.report [issue details]*\nYour report will be filed for group admins.');
 
         const data = store('groupReports');
         if (!data[jid]) data[jid] = [];
         data[jid].push({ from: sender, text, ts: Date.now() });
         save('groupReports');
-        await reply('✅ Laporan kamu sudah dicatat. Admin akan meninjau dengan *.listlaporan*.');
+        await reply('✅ Your report has been submitted. Admins can review it with *.listreports*.');
     },
 
     async listReports(reply, jid, isAdmin) {
         if (!isAdminCheck(isAdmin, reply)) return;
         const data = store('groupReports');
         const items = data[jid] || [];
-        if (!items.length) return reply('📋 Tidak ada laporan tertunda.');
+        if (!items.length) return reply('📋 No pending reports found.');
         const lines = items.slice(-10).map((r, i) => `${i + 1}. @${jidNum(r.from)}: ${r.text}`);
-        await reply(`📋 *LAPORAN MEMBER (10 terakhir)*\n\n${lines.join('\n')}`);
+        await reply(`📋 *MEMBER REPORTS (Last 10)*\n\n${lines.join('\n')}`);
     },
 
     async clearReports(reply, jid, isAdmin) {
@@ -159,37 +151,31 @@ export const adminCommands3 = {
         const data = store('groupReports');
         data[jid] = [];
         save('groupReports');
-        await reply('✅ Semua laporan telah dibersihkan.');
+        await reply('✅ All member reports have been cleared.');
     },
 
-    // ─── GROUP STATS RINGKAS ────────────────────────────────────────────────
+    // ─── GROUP ACTIVITY OVERVIEW ─────────────────────────────────────────────
     async groupActivity(reply, jid) {
         const polls = getPolls(jid);
         const schedules = store('groupSchedule')[jid] || [];
         const reports = store('groupReports')[jid] || [];
         await reply(
-`📈 *AKTIVITAS GRUP*
+`📈 *GROUP ACTIVITY DASHBOARD*
 
-📊 Total Polling: ${polls.length}
-📅 Total Jadwal: ${schedules.length}
-📋 Laporan Tertunda: ${reports.length}`
+📊 Total Polls: ${polls.length}
+📅 Active Schedules: ${schedules.length}
+📋 Pending Reports: ${reports.length}`
         );
     },
 
-    // ─── SIDER — DETEKSI MEMBER YANG GAK PERNAH/JARANG CHAT ─────────────────
-    // "Sider" = member yang ada di grup tapi cuma numpang lihat doang, gak
-    // pernah ikut ngobrol. Dihitung dengan membandingkan waktu chat terakhir
-    // tiap member (dicatat otomatis oleh lib/siderTracker.js setiap ada
-    // pesan grup masuk) terhadap daftar participant grup SAAT INI (jadi
-    // member yang baru keluar tidak ikut muncul, dan member baru join tidak
-    // langsung dicap sider walau belum pernah chat — lihat catatan di bawah).
+    // ─── INACTIVE MEMBERS (SIDER) TRACKER ────────────────────────────────────
     async checkSider(sock, reply, jid, args, isAdmin) {
         if (!isAdminCheck(isAdmin, reply)) return;
 
         let thresholdMs = DEFAULT_SIDER_THRESHOLD_MS;
         if (args[0]) {
             const parsed = parseDurationArg(args[0], 'd');
-            if (!parsed) return reply('📌 Format threshold salah. Contoh: *.sider 7d* (7 hari) atau *.sider 12h* (12 jam).');
+            if (!parsed) return reply('📌 Invalid duration format. Example: *.sider 7d* or *.sider 12h*.');
             thresholdMs = parsed;
         }
 
@@ -197,45 +183,44 @@ export const adminCommands3 = {
         try {
             metadata = await sock.groupMetadata(jid);
         } catch {
-            return reply('❌ Gagal mengambil data member grup. Coba lagi sebentar.');
+            return reply('❌ Failed to fetch group members. Please try again.');
         }
 
         const siders = computeSiders(jid, metadata.participants, thresholdMs, true);
         if (!siders.length) {
-            return reply(`✅ Tidak ada sider terdeteksi di grup ini *(threshold: ${fmtDuration(thresholdMs)})*.\nSemua member (non-admin) sudah pernah chat dalam rentang waktu itu.`);
+            return reply(`✅ No inactive members detected *(threshold: ${fmtDuration(thresholdMs)})*.\nAll non-admin members have chatted recently.`);
         }
 
         const lines = siders.map((s, i) => {
             const status = s.idleMs === null
-                ? 'belum pernah chat sama sekali'
-                : `terakhir chat ${fmtDuration(s.idleMs)} lalu`;
+                ? 'never sent a message'
+                : `last active ${fmtDuration(s.idleMs)} ago`;
             return `${i + 1}. @${jidNum(displayJid(s.id))} — _${status}_`;
         });
 
         await sock.sendMessage(jid, {
             text:
-`👀 *DAFTAR SIDER*
+`👀 *INACTIVE MEMBERS (SIDERS)*
 ━━━━━━━━━━━━━━━━━━
-Threshold tidak aktif : *${fmtDuration(thresholdMs)}*
-Jumlah terdeteksi     : *${siders.length} member*
+Inactivity threshold : *${fmtDuration(thresholdMs)}*
+Detected members     : *${siders.length} members*
 ━━━━━━━━━━━━━━━━━━
 ${lines.join('\n')}
 ━━━━━━━━━━━━━━━━━━
-💡 Admin grup TIDAK dihitung sebagai sider.
-⚠️ Member yang baru join dan belum pernah tercatat aktif akan ikut muncul di sini — cek dulu sebelum kick kalau grup baru pasang fitur ini.
-👉 Ketik *.kicksider* untuk keluarkan semua sider di atas sekaligus.`,
+💡 Group admins are excluded from inactivity checks.
+👉 Type *.kicksider* to remove all detected inactive members.`,
             mentions: siders.map(s => s.id),
         });
     },
 
-    // ─── KICK SEMUA SIDER SEKALIGUS ──────────────────────────────────────────
+    // ─── KICK INACTIVE MEMBERS ───────────────────────────────────────────────
     async kickSider(sock, reply, msg, jid, args, isAdmin) {
         if (!isAdminCheck(isAdmin, reply)) return;
 
         let thresholdMs = DEFAULT_SIDER_THRESHOLD_MS;
         if (args[0]) {
             const parsed = parseDurationArg(args[0], 'd');
-            if (!parsed) return reply('📌 Format threshold salah. Contoh: *.kicksider 7d* (7 hari).');
+            if (!parsed) return reply('📌 Invalid duration format. Example: *.kicksider 7d*.');
             thresholdMs = parsed;
         }
 
@@ -243,28 +228,28 @@ ${lines.join('\n')}
         try {
             metadata = await sock.groupMetadata(jid);
         } catch {
-            return reply('❌ Gagal mengambil data member grup. Coba lagi sebentar.');
+            return reply('❌ Failed to fetch group members. Please try again.');
         }
 
         const siders = computeSiders(jid, metadata.participants, thresholdMs, true);
         if (!siders.length) {
-            return reply(`✅ Tidak ada sider untuk di-kick *(threshold: ${fmtDuration(thresholdMs)})*.`);
+            return reply(`✅ No inactive members found to remove *(threshold: ${fmtDuration(thresholdMs)})*.`);
         }
 
-        await reply(`🔎 Ditemukan *${siders.length}* sider. Mulai proses kick satu per satu...`);
+        await reply(`🔎 Found *${siders.length}* inactive members. Starting removal process...`);
 
         const results = [];
         for (const s of siders) {
             try {
                 await sock.groupParticipantsUpdate(jid, [s.id], 'remove');
-                results.push(`👢 @${jidNum(displayJid(s.id))} — dikeluarkan`);
+                results.push(`👢 @${jidNum(displayJid(s.id))} — removed`);
             } catch {
-                results.push(`❌ @${jidNum(displayJid(s.id))} — gagal dikeluarkan`);
+                results.push(`❌ @${jidNum(displayJid(s.id))} — failed to remove`);
             }
         }
 
         await sock.sendMessage(jid, {
-            text: `✅ *PROSES KICK SIDER SELESAI*\n━━━━━━━━━━━━━━━━━━\n${results.join('\n')}`,
+            text: `✅ *INACTIVE MEMBER REMOVAL COMPLETED*\n━━━━━━━━━━━━━━━━━━\n${results.join('\n')}`,
             mentions: siders.map(s => s.id),
         }, { quoted: msg });
     },
