@@ -14,6 +14,7 @@ import { NodeCache } from '@cacheable/node-cache';
 import baileysPkg, {
     useMultiFileAuthState,
     fetchLatestBaileysVersion,
+    fetchLatestWaWebVersion,
     makeCacheableSignalKeyStore,
     DisconnectReason,
     Browsers,
@@ -67,14 +68,38 @@ let isManualUnlink = false;
 export function normalizePhoneNumber(raw) {
     let n = String(raw || '').replace(/[^0-9]/g, '');
     if (n.startsWith('00')) n = n.slice(2);
+
+    // Redundant trunk zero after Pakistan country code:
+    // e.g. User clicked +92 prefix and typed 03107260507 -> 9203107260507 (13 digits)
+    if (n.startsWith('920') && n.length === 13) {
+        n = '92' + n.slice(3);
+    } else if (n.startsWith('9203') && n.length >= 13) {
+        n = '92' + n.slice(3);
+    }
     // Pakistani local 03xx format: 03107260507 (11 digits) -> 923107260507
-    if (n.startsWith('03') && n.length === 11) {
+    else if (n.startsWith('03') && n.length === 11) {
         n = '92' + n.slice(1);
     } else if (n.startsWith('0') && n.length === 11) {
         n = '92' + n.slice(1);
     } else if (n.startsWith('3') && n.length === 10) {
         n = '92' + n;
     }
+
+    // India: 910xxxxxxxxxx (13 digits) -> 91xxxxxxxxxx (12 digits)
+    else if (n.startsWith('910') && n.length === 13) {
+        n = '91' + n.slice(3);
+    }
+
+    // United Kingdom: 4407xxxxxxxxx (13 digits) -> 447xxxxxxxxx (12 digits)
+    else if (n.startsWith('440') && n.length === 13) {
+        n = '44' + n.slice(3);
+    }
+
+    // Indonesia: 6208xxxxxxxxxx -> 628xxxxxxxxxx
+    else if (n.startsWith('620') && (n.length === 13 || n.length === 14)) {
+        n = '62' + n.slice(3);
+    }
+
     return n;
 }
 
@@ -129,7 +154,18 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
 
     const pinoLog = pino({ level: 'silent' });
     const { state, saveCreds } = await useMultiFileAuthState(customDir);
-    const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: [2, 3000, 1037641644] }));
+    let version = [2, 3000, 1037641644];
+    try {
+        if (typeof fetchLatestWaWebVersion === 'function') {
+            const v = await fetchLatestWaWebVersion({}).catch(() => null);
+            if (v?.version) version = v.version;
+        } else if (typeof fetchLatestBaileysVersion === 'function') {
+            const v = await fetchLatestBaileysVersion().catch(() => null);
+            if (v?.version) version = v.version;
+        }
+    } catch (e) {
+        console.warn('Version check warning:', e.message);
+    }
 
     const sock = makeWASocket({
         version,
@@ -235,22 +271,17 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
 
             console.log(`[MASTER MD] Socket connection closed (Code: ${statusCode || 'unknown'}).`);
 
-            let credsRegistered = false;
-            try {
-                const credsPath = path.join(customDir, 'creds.json');
-                if (fs.existsSync(credsPath)) {
-                    const data = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
-                    credsRegistered = !!data.registered;
-                }
-            } catch {}
-
-            // Reconnect on 515 (restartRequired during successful pairing) OR if session is registered!
-            // NEVER destroy an unlinked pairing socket while waiting for the user to type the code!
-            if (!isLoggedOut && !isManualUnlink && (isRestart || credsRegistered)) {
-                console.log(`[MASTER MD] Reconnecting socket to finalize session (Status: ${statusCode || 515})...`);
-                setTimeout(() => launchMasterBot(customDir, rawNumber), 2500);
+            // Reconnect on 515 (restartRequired during successful pairing) OR ANY non-logout disconnect!
+            // When user enters pairing code, WhatsApp drops socket with 515 to switch to companion mode.
+            // Reconnection MUST happen ultra-fast (300ms) so phone does not timeout with "Couldn't link device".
+            if (!isLoggedOut && !isManualUnlink) {
+                const reconnectDelay = isRestart ? 300 : 1800;
+                console.log(`[MASTER MD] Reconnecting socket (Status: ${statusCode || 515}, delay: ${reconnectDelay}ms)...`);
+                setTimeout(() => launchMasterBot(customDir, rawNumber), reconnectDelay);
             } else {
-                console.log(`[MASTER MD] Disconnected without registered session (Code: ${statusCode || 'unknown'}).`);
+                console.log(`[MASTER MD] Session logged out or manually unlinked (Code: ${statusCode || 'unknown'}).`);
+                currentConnectedPhone = null;
+                globalActiveSock = null;
             }
         }
     });
@@ -307,6 +338,16 @@ app.post('/api/pair', async (req, res) => {
         } catch {}
 
         if (!isRegistered) {
+            // Terminate existing active socket cleanly before purging unauthenticated cache
+            if (globalActiveSock) {
+                try {
+                    globalActiveSock.ev.removeAllListeners();
+                    globalActiveSock.end();
+                } catch {}
+                globalActiveSock = null;
+                await delay(300);
+            }
+
             try {
                 if (fs.existsSync(SESSION_DIR)) {
                     const files = fs.readdirSync(SESSION_DIR);
@@ -322,17 +363,24 @@ app.post('/api/pair', async (req, res) => {
         }
 
         let activeSock = null;
+        let lastQrString = null;
 
         await launchMasterBot(SESSION_DIR, rawNumber, (sock) => {
             activeSock = sock;
-            sessions.set(sessionId, { status: 'handshaking', sock, phoneNumber: rawNumber });
+            const current = sessions.get(sessionId) || {};
+            sessions.set(sessionId, { ...current, status: 'handshaking', sock, phoneNumber: rawNumber });
 
             sock.ev.on('connection.update', (update) => {
+                const cur = sessions.get(sessionId) || {};
+                if (update.qr) {
+                    lastQrString = update.qr;
+                    sessions.set(sessionId, { ...cur, qr: update.qr, phoneNumber: rawNumber });
+                }
                 if (update.connection === 'connecting' || update.isNewLogin) {
-                    sessions.set(sessionId, { status: 'logging_in', sock, phoneNumber: rawNumber });
+                    sessions.set(sessionId, { ...cur, status: 'logging_in', sock, phoneNumber: rawNumber });
                 }
                 if (update.connection === 'open') {
-                    sessions.set(sessionId, { status: 'connected', sock, phoneNumber: rawNumber });
+                    sessions.set(sessionId, { ...cur, status: 'connected', sock, phoneNumber: rawNumber });
                 }
             });
         });
@@ -346,6 +394,7 @@ app.post('/api/pair', async (req, res) => {
             const listener = (update) => {
                 if (update.qr || update.connection === 'open') {
                     isHandshakeReady = true;
+                    if (update.qr) lastQrString = update.qr;
                     clearTimeout(timer);
                     resolve();
                 }
@@ -385,9 +434,12 @@ app.post('/api/pair', async (req, res) => {
         }
 
         const rawCode = String(pairingCode || '').trim();
+        const cur = sessions.get(sessionId) || {};
         sessions.set(sessionId, {
+            ...cur,
             status: 'waiting_for_user',
             code: rawCode,
+            qr: lastQrString,
             sock: activeSock,
             phoneNumber: rawNumber
         });
@@ -399,6 +451,8 @@ app.post('/api/pair', async (req, res) => {
             success: true,
             sessionId,
             code: rawCode,
+            qr: lastQrString,
+            phoneNumber: rawNumber,
             message: 'Pairing code generated successfully.'
         });
 
@@ -421,6 +475,8 @@ app.get('/api/status', (req, res) => {
     return res.status(200).json({
         status: sess.status,
         code: sess.code || null,
+        qr: sess.qr || null,
+        phoneNumber: sess.phoneNumber || null,
         success: hasCode,
         error: sess.error || null,
         message: sess.status === 'connected'

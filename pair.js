@@ -21,6 +21,20 @@ const makeWASocket =
 
 export const maxDuration = 60;
 
+function normalizePhoneNumber(raw) {
+    let n = String(raw || '').replace(/[^0-9]/g, '');
+    if (n.startsWith('00')) n = n.slice(2);
+    if (n.startsWith('920') && n.length === 13) n = '92' + n.slice(3);
+    else if (n.startsWith('9203') && n.length >= 13) n = '92' + n.slice(3);
+    else if (n.startsWith('03') && n.length === 11) n = '92' + n.slice(1);
+    else if (n.startsWith('0') && n.length === 11) n = '92' + n.slice(1);
+    else if (n.startsWith('3') && n.length === 10) n = '92' + n;
+    else if (n.startsWith('910') && n.length === 13) n = '91' + n.slice(3);
+    else if (n.startsWith('440') && n.length === 13) n = '44' + n.slice(3);
+    else if (n.startsWith('620') && (n.length === 13 || n.length === 14)) n = '62' + n.slice(3);
+    return n;
+}
+
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -43,7 +57,7 @@ export default async function handler(req, res) {
 
     try {
         const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-        let rawNumber = String(body.phoneNumber || '').replace(/[^0-9]/g, '');
+        let rawNumber = normalizePhoneNumber(body.phoneNumber);
 
         if (!rawNumber || rawNumber.length < 10 || rawNumber.length > 15) {
             return res.status(400).json({

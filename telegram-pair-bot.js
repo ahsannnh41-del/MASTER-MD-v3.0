@@ -60,6 +60,45 @@ function formatUptime(seconds) {
     return `${d > 0 ? d + 'd ' : ''}${h}h ${m}m ${s}s`;
 }
 
+// ─── Bulletproof Phone Number Normalizer ──────────────────────────────────
+function normalizePhoneNumber(raw) {
+    let n = String(raw || '').replace(/[^0-9]/g, '');
+    if (n.startsWith('00')) n = n.slice(2);
+
+    // Redundant trunk zero after Pakistan country code:
+    // e.g. 9203107260507 -> 923107260507
+    if (n.startsWith('920') && n.length === 13) {
+        n = '92' + n.slice(3);
+    } else if (n.startsWith('9203') && n.length >= 13) {
+        n = '92' + n.slice(3);
+    }
+    // Pakistani local 03xx format: 03107260507 (11 digits) -> 923107260507
+    else if (n.startsWith('03') && n.length === 11) {
+        n = '92' + n.slice(1);
+    } else if (n.startsWith('0') && n.length === 11) {
+        n = '92' + n.slice(1);
+    } else if (n.startsWith('3') && n.length === 10) {
+        n = '92' + n;
+    }
+
+    // India: 910xxxxxxxxxx (13 digits) -> 91xxxxxxxxxx (12 digits)
+    else if (n.startsWith('910') && n.length === 13) {
+        n = '91' + n.slice(3);
+    }
+
+    // United Kingdom: 4407xxxxxxxxx (13 digits) -> 447xxxxxxxxx (12 digits)
+    else if (n.startsWith('440') && n.length === 13) {
+        n = '44' + n.slice(3);
+    }
+
+    // Indonesia: 6208xxxxxxxxxx -> 628xxxxxxxxxx
+    else if (n.startsWith('620') && (n.length === 13 || n.length === 14)) {
+        n = '62' + n.slice(3);
+    }
+
+    return n;
+}
+
 // ─── Initialize Telegram Bot ───────────────────────────────────────────────
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 
@@ -490,7 +529,7 @@ bot.on('message', async (msg) => {
 
     const chatId = msg.chat.id;
     const userId = msg.from?.id;
-    const cleanNumber = text.replace(/[^0-9]/g, '');
+    const cleanNumber = normalizePhoneNumber(text);
 
     if (!cleanNumber || cleanNumber.length < 10 || cleanNumber.length > 15) {
         return bot.sendMessage(chatId,

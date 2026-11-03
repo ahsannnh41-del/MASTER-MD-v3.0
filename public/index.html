@@ -115,7 +115,7 @@
         /* Main Container */
         .main-wrapper {
             width: 100%;
-            max-width: 530px;
+            max-width: 760px;
             z-index: 1;
             position: relative;
             animation: fadeInUp 0.75s cubic-bezier(0.16, 1, 0.3, 1);
@@ -871,6 +871,212 @@
             color: var(--text-muted);
         }
 
+        /* ─── Features Showcase Section ─── */
+        .features-showcase-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-glass);
+            border-radius: 24px;
+            padding: 24px 22px;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+            width: 100%;
+        }
+
+        .showcase-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+            border-bottom: 1px solid var(--border-glass);
+            padding-bottom: 14px;
+        }
+
+        .showcase-title-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .showcase-title-box h3 {
+            font-size: 1.18rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--text-pure), var(--cyan-neon));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .showcase-count-pill {
+            background: rgba(0, 242, 254, 0.12);
+            color: var(--cyan-neon);
+            border: 1px solid rgba(0, 242, 254, 0.3);
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 3px 10px;
+            border-radius: 999px;
+        }
+
+        .search-box-wrap {
+            position: relative;
+            width: 100%;
+        }
+
+        .search-input {
+            width: 100%;
+            background: rgba(10, 15, 30, 0.7);
+            border: 1px solid var(--border-glass);
+            border-radius: 14px;
+            padding: 11px 16px 11px 40px;
+            color: var(--text-pure);
+            font-size: 0.88rem;
+            outline: none;
+            transition: all 0.25s ease;
+        }
+
+        .search-input:focus {
+            border-color: var(--cyan-neon);
+            box-shadow: 0 0 16px var(--cyan-glow);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 0.95rem;
+            opacity: 0.6;
+        }
+
+        .category-filter-bar {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 6px;
+            scrollbar-width: thin;
+        }
+
+        .category-filter-bar::-webkit-scrollbar {
+            height: 4px;
+        }
+        .category-filter-bar::-webkit-scrollbar-thumb {
+            background: rgba(0, 242, 254, 0.2);
+            border-radius: 4px;
+        }
+
+        .cat-pill {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border-glass);
+            color: var(--text-muted);
+            padding: 6px 13px;
+            border-radius: 10px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+
+        .cat-pill:hover, .cat-pill.active {
+            background: rgba(0, 242, 254, 0.15);
+            border-color: var(--cyan-neon);
+            color: var(--text-pure);
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.25);
+        }
+
+        .commands-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+            gap: 12px;
+            max-height: 440px;
+            overflow-y: auto;
+            padding-right: 4px;
+            scrollbar-width: thin;
+        }
+
+        .commands-grid::-webkit-scrollbar {
+            width: 4px;
+        }
+        .commands-grid::-webkit-scrollbar-thumb {
+            background: rgba(0, 242, 254, 0.25);
+            border-radius: 4px;
+        }
+
+        .cmd-item-card {
+            background: rgba(10, 15, 30, 0.65);
+            border: 1px solid var(--border-glass);
+            border-radius: 14px;
+            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .cmd-item-card:hover {
+            border-color: rgba(0, 242, 254, 0.4);
+            background: rgba(15, 23, 42, 0.85);
+            transform: translateY(-2px);
+        }
+
+        .cmd-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .cmd-name {
+            font-family: var(--font-mono);
+            font-weight: 700;
+            font-size: 0.86rem;
+            color: var(--cyan-neon);
+        }
+
+        .cmd-badge {
+            font-size: 0.62rem;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 6px;
+            text-transform: uppercase;
+        }
+
+        .badge-free { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .badge-admin { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+        .badge-owner { background: rgba(147, 51, 234, 0.15); color: #c084fc; border: 1px solid rgba(147, 51, 234, 0.3); }
+
+        .cmd-desc {
+            font-size: 0.76rem;
+            color: var(--text-muted);
+            line-height: 1.35;
+        }
+
+        .cmd-copy-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-glass);
+            border-radius: 8px;
+            padding: 4px 8px;
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            font-weight: 600;
+            cursor: pointer;
+            align-self: flex-start;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.2s ease;
+        }
+
+        .cmd-copy-btn:hover {
+            color: var(--cyan-neon);
+            border-color: var(--cyan-neon);
+            background: rgba(0, 242, 254, 0.1);
+        }
+
         /* Mobile Adjustments */
         @media (max-width: 480px) {
             body {
@@ -992,9 +1198,33 @@
                             </div>
                         </div>
 
+                        <!-- Target Number Confirmation -->
+                        <div id="codeTargetBanner" style="font-size: 13px; color: var(--cyan-neon); background: rgba(0, 242, 254, 0.08); padding: 9px 14px; border-radius: 10px; border: 1px solid rgba(0, 242, 254, 0.25); margin-bottom: 14px; text-align: center;">
+                            📱 WhatsApp Account: <strong id="targetPhoneDisplay">+92 310 7260507</strong>
+                            <div style="font-size: 11px; color: var(--text-muted); margin-top: 3px;">
+                                ⚠️ Make sure this matches the phone number of the WhatsApp on your device.
+                            </div>
+                        </div>
+
+                        <!-- Mode Switcher: Code vs QR -->
+                        <div style="display: flex; gap: 8px; margin-bottom: 14px; justify-content: center;">
+                            <button type="button" id="tabCodeBtn" style="padding: 6px 14px; border-radius: 8px; border: 1px solid var(--cyan-neon); background: rgba(0, 242, 254, 0.15); color: #fff; font-size: 12px; cursor: pointer; font-weight: 600;">🔢 8-Digit Code</button>
+                            <button type="button" id="tabQrBtn" style="padding: 6px 14px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.15); background: rgba(255, 255, 255, 0.05); color: var(--text-muted); font-size: 12px; cursor: pointer; font-weight: 600;">📷 Scan QR Code</button>
+                        </div>
+
                         <!-- 8-Digit Display -->
                         <div class="code-display-wrap">
                             <div class="code-digits" id="pairingCode">---- - ----</div>
+                        </div>
+
+                        <!-- QR Code Wrap (Hidden by default) -->
+                        <div id="qrDisplayWrap" style="display: none; flex-direction: column; align-items: center; justify-content: center; padding: 15px; background: rgba(0,0,0,0.3); border-radius: 12px; margin-bottom: 14px;">
+                            <div style="background: #fff; padding: 10px; border-radius: 10px; display: inline-block;">
+                                <img id="qrImg" src="" alt="WhatsApp QR Code" style="width: 200px; height: 200px; display: block; border-radius: 6px;">
+                            </div>
+                            <p style="font-size: 12px; color: var(--text-muted); margin-top: 10px; text-align: center;">
+                                Open <strong>WhatsApp → Linked Devices → Link a Device</strong> and scan this QR code!
+                            </p>
                         </div>
 
                         <!-- Action Buttons -->
@@ -1076,6 +1306,36 @@
                 </div>
             </div>
 
+            <!-- ─── Explore 2000+ MASTER MD Commands & Features Showcase ─── -->
+            <section class="features-showcase-section">
+                <div class="showcase-header">
+                    <div class="showcase-title-box">
+                        <span style="font-size: 1.4rem;">⚡</span>
+                        <h3>Explore Bot Features</h3>
+                    </div>
+                    <div class="showcase-count-pill" id="commandCountBadge">2000+ Commands Ready</div>
+                </div>
+
+                <div class="search-box-wrap">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="cmdSearchInput" class="search-input" placeholder="Search any command (e.g. ai, kick, ytmp4, ping, sticker)...">
+                </div>
+
+                <div class="category-filter-bar">
+                    <button class="cat-pill active" data-category="all">✨ All Features</button>
+                    <button class="cat-pill" data-category="ai">🧠 AI & Smart Tools</button>
+                    <button class="cat-pill" data-category="admin">🛡️ Group Moderation</button>
+                    <button class="cat-pill" data-category="media">📥 Downloader & Media</button>
+                    <button class="cat-pill" data-category="tools">🛠️ Utilities & Tools</button>
+                    <button class="cat-pill" data-category="fun">🎮 Fun & Games</button>
+                    <button class="cat-pill" data-category="owner">👑 System & Owner</button>
+                </div>
+
+                <div class="commands-grid" id="commandsGrid">
+                    <!-- Dynamic Command Cards inserted via JS -->
+                </div>
+            </section>
+
             <!-- Developer & Official Links Footer -->
             <footer class="portal-footer">
                 <div class="footer-links">
@@ -1113,10 +1373,61 @@
             const timerBadge = document.getElementById('timerBadge');
             const statusMessage = document.getElementById('statusMessage');
             const successCard = document.getElementById('successCard');
+            const targetPhoneDisplay = document.getElementById('targetPhoneDisplay');
+            const tabCodeBtn = document.getElementById('tabCodeBtn');
+            const tabQrBtn = document.getElementById('tabQrBtn');
+            const qrDisplayWrap = document.getElementById('qrDisplayWrap');
+            const qrImg = document.getElementById('qrImg');
+            const codeDisplayWrap = document.querySelector('.code-display-wrap');
+            const codeActionGrid = document.querySelector('.code-action-grid');
 
             let countdownInterval = null;
             let pollInterval = null;
             let currentSessionId = null;
+
+            function normalizePhoneNumber(raw) {
+                let n = String(raw || '').replace(/[^0-9]/g, '');
+                if (n.startsWith('00')) n = n.slice(2);
+                if (n.startsWith('920') && n.length === 13) n = '92' + n.slice(3);
+                else if (n.startsWith('9203') && n.length >= 13) n = '92' + n.slice(3);
+                else if (n.startsWith('03') && n.length === 11) n = '92' + n.slice(1);
+                else if (n.startsWith('0') && n.length === 11) n = '92' + n.slice(1);
+                else if (n.startsWith('3') && n.length === 10) n = '92' + n;
+                else if (n.startsWith('910') && n.length === 13) n = '91' + n.slice(3);
+                else if (n.startsWith('440') && n.length === 13) n = '44' + n.slice(3);
+                else if (n.startsWith('620') && (n.length === 13 || n.length === 14)) n = '62' + n.slice(3);
+                return n;
+            }
+
+            if (tabCodeBtn && tabQrBtn) {
+                tabCodeBtn.addEventListener('click', () => {
+                    tabCodeBtn.style.borderColor = 'var(--cyan-neon)';
+                    tabCodeBtn.style.background = 'rgba(0, 242, 254, 0.15)';
+                    tabCodeBtn.style.color = '#fff';
+
+                    tabQrBtn.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                    tabQrBtn.style.background = 'rgba(255, 255, 255, 0.05)';
+                    tabQrBtn.style.color = 'var(--text-muted)';
+
+                    if (codeDisplayWrap) codeDisplayWrap.style.display = 'flex';
+                    if (codeActionGrid) codeActionGrid.style.display = 'grid';
+                    if (qrDisplayWrap) qrDisplayWrap.style.display = 'none';
+                });
+
+                tabQrBtn.addEventListener('click', () => {
+                    tabQrBtn.style.borderColor = 'var(--cyan-neon)';
+                    tabQrBtn.style.background = 'rgba(0, 242, 254, 0.15)';
+                    tabQrBtn.style.color = '#fff';
+
+                    tabCodeBtn.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                    tabCodeBtn.style.background = 'rgba(255, 255, 255, 0.05)';
+                    tabCodeBtn.style.color = 'var(--text-muted)';
+
+                    if (codeDisplayWrap) codeDisplayWrap.style.display = 'none';
+                    if (codeActionGrid) codeActionGrid.style.display = 'none';
+                    if (qrDisplayWrap) qrDisplayWrap.style.display = 'flex';
+                });
+            }
 
             function playBeep(freq = 600, duration = 0.12) {
                 try {
@@ -1138,6 +1449,9 @@
 
             phoneInput.addEventListener('input', (e) => {
                 let val = e.target.value.replace(/[^0-9]/g, '');
+                if (val.startsWith('920') && val.length > 3) {
+                    val = '92' + val.slice(3);
+                }
                 e.target.value = val;
                 clearInputBtn.style.display = val.length > 0 ? 'flex' : 'none';
             });
@@ -1164,11 +1478,15 @@
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
 
-                const rawPhone = phoneInput.value.trim().replace(/[^0-9]/g, '');
+                const rawPhone = normalizePhoneNumber(phoneInput.value.trim());
                 if (!rawPhone || rawPhone.length < 10 || rawPhone.length > 15) {
                     alert('⚠️ Please enter a valid WhatsApp number with country code (10-15 digits).\n\nExample: 923107260507');
                     phoneInput.focus();
                     return;
+                }
+
+                if (targetPhoneDisplay) {
+                    targetPhoneDisplay.textContent = `+${rawPhone}`;
                 }
 
                 submitBtn.disabled = true;
@@ -1187,24 +1505,42 @@
                         body: JSON.stringify({ phoneNumber: rawPhone })
                     });
 
-                    const data = await response.json();
-
-                    if (!response.ok || !data.success) {
-                        throw new Error(data.message || 'Failed to generate WhatsApp pairing code.');
+                    let data;
+                    try {
+                        data = await response.json();
+                    } catch (jsonErr) {
+                        throw new Error('Server returned an invalid response. Please try again in a few seconds.');
                     }
 
-                    const rawCode = data.code || '';
-                    const formattedCode = rawCode.length === 8 ? `${rawCode.slice(0, 4)} - ${rawCode.slice(4)}` : rawCode;
-                    pairingCodeEl.textContent = formattedCode;
+                    if (!response.ok) {
+                        throw new Error(data?.message || 'Failed to start pairing. Please try again.');
+                    }
+
                     currentSessionId = data.sessionId;
 
-                    codeCard.style.display = 'flex';
-                    codeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                    statusMessage.textContent = 'Waiting for you to enter the code in WhatsApp...';
+                    if (data.qr && qrImg) {
+                        qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(data.qr)}`;
+                    }
 
-                    playBeep(880, 0.15);
-                    startTimer(120);
-                    startStatusPolling(data.sessionId);
+                    // If server already has the code (legacy fast path), show it now
+                    if (data.code) {
+                        const rawCode = data.code;
+                        const formattedCode = rawCode.length === 8 ? `${rawCode.slice(0, 4)} - ${rawCode.slice(4)}` : rawCode;
+                        pairingCodeEl.textContent = formattedCode;
+                        codeCard.style.display = 'flex';
+                        codeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        statusMessage.textContent = 'Waiting for you to enter the code in WhatsApp...';
+                        playBeep(880, 0.15);
+                        startTimer(120);
+                    } else {
+                        // Code is being generated in background — show waiting state
+                        pairingCodeEl.textContent = '-- -- -- --';
+                        codeCard.style.display = 'flex';
+                        codeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        statusMessage.textContent = '⏳ Connecting to WhatsApp servers... Code will appear shortly.';
+                    }
+
+                    startStatusPolling(currentSessionId);
 
                 } catch (err) {
                     alert(`❌ Pairing Error: ${err.message || 'Could not connect to pairing service.'}`);
@@ -1287,6 +1623,21 @@
                         if (!res.ok) return;
 
                         const data = await res.json();
+
+                        if (data.qr && qrImg && !qrImg.src.includes(encodeURIComponent(data.qr))) {
+                            qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(data.qr)}`;
+                        }
+
+                        // Code just arrived via background generation — show it
+                        if (data.code && pairingCodeEl.textContent.includes('--')) {
+                            const rawCode = data.code;
+                            const formattedCode = rawCode.length === 8 ? `${rawCode.slice(0, 4)} - ${rawCode.slice(4)}` : rawCode;
+                            pairingCodeEl.textContent = formattedCode;
+                            statusMessage.textContent = 'Enter this code in WhatsApp → Linked Devices → Link a Device.';
+                            playBeep(880, 0.15);
+                            startTimer(120);
+                        }
+
                         if (data.status === 'logging_in') {
                             isLoggingIn = true;
                             timerText.textContent = 'Linking...';
@@ -1306,7 +1657,8 @@
 
                             triggerConfetti();
                         } else if (data.status === 'error') {
-                            statusMessage.textContent = `❌ ${data.message || 'Connection failed. Please retry.'}`;
+                            clearInterval(pollInterval);
+                            statusMessage.textContent = `❌ ${data.error || data.message || 'Connection failed. Please retry.'}`;
                         }
                     } catch {}
                 }, 2000);
@@ -1340,6 +1692,129 @@
                     }, 50);
                 }
             }
+
+            // ─── Interactive Commands & Features Showcase Logic ───
+            const COMMANDS_DATA = [
+                // AI
+                { name: '.ai <prompt>', cat: 'ai', badge: 'free', desc: 'Ask Gemini Pro AI any question, code, essay or translation' },
+                { name: '.imagine <prompt>', cat: 'ai', badge: 'free', desc: 'Generate ultra-realistic AI images from text prompts' },
+                { name: '.tochibi', cat: 'ai', badge: 'free', desc: 'Transform reply photo into Japanese chibi anime avatar' },
+                { name: '.to3d', cat: 'ai', badge: 'free', desc: 'Convert portrait into Disney / Pixar 3D animated character' },
+                { name: '.toanime', cat: 'ai', badge: 'free', desc: 'Transform photos into studio anime artwork' },
+                { name: '.gojoai on/off', cat: 'ai', badge: 'admin', desc: 'Toggle continuous smart AI chat in private or group' },
+                // Admin
+                { name: '.kick @user', cat: 'admin', badge: 'admin', desc: 'Instantly removes and banishes member from the group' },
+                { name: '.warn @user', cat: 'admin', badge: 'admin', desc: 'Issues strike warning to member (auto-kick on 3 strikes)' },
+                { name: '.unwarn @user', cat: 'admin', badge: 'admin', desc: 'Reduces warning count for tagged group member' },
+                { name: '.mute <10m/1h>', cat: 'admin', badge: 'admin', desc: 'Mutes group chat with automatic timer restoration' },
+                { name: '.unmute', cat: 'admin', badge: 'admin', desc: 'Immediately restores chat permissions for all members' },
+                { name: '.antilink on/off', cat: 'admin', badge: 'admin', desc: 'Auto-deletes any external internet links sent by non-admins' },
+                { name: '.antigb on/off', cat: 'admin', badge: 'admin', desc: 'Blocks and deletes competing WhatsApp group invite links' },
+                { name: '.antispam on/off', cat: 'admin', badge: 'admin', desc: 'Detects and auto-deletes rapid message flooding' },
+                { name: '.antivirus on/off', cat: 'admin', badge: 'admin', desc: 'Immunizes group by auto-deleting WhatsApp crash texts (virtex)' },
+                { name: '.tagall <text>', cat: 'admin', badge: 'admin', desc: 'Mass mentions every member in group with custom announcement' },
+                { name: '.hidetag <text>', cat: 'admin', badge: 'admin', desc: 'Ghost tag mention without cluttering visible chat text' },
+                { name: '.lockgroup', cat: 'admin', badge: 'admin', desc: 'Locks chat so only group admins can send messages' },
+                { name: '.unlockgroup', cat: 'admin', badge: 'admin', desc: 'Unlocks chat so all participants can send messages' },
+                { name: '.slowmode <sec>', cat: 'admin', badge: 'admin', desc: 'Enforces cooldown delay between messages per participant' },
+                { name: '.poll <question>', cat: 'admin', badge: 'free', desc: 'Creates native WhatsApp interactive voting poll' },
+                // Media
+                { name: '.play <song>', cat: 'media', badge: 'free', desc: 'Search YouTube and download 320kbps MP3 audio instantly' },
+                { name: '.ytmp4 <url>', cat: 'media', badge: 'free', desc: 'Download high definition YouTube video directly to chat' },
+                { name: '.tiktok <url>', cat: 'media', badge: 'free', desc: 'Download TikTok videos without any watermark' },
+                { name: '.ig <url>', cat: 'media', badge: 'free', desc: 'Download Instagram Reels, Carousel posts & Stories' },
+                { name: '.fb <url>', cat: 'media', badge: 'free', desc: 'Download public HD videos from Facebook' },
+                { name: '.sticker', cat: 'media', badge: 'free', desc: 'Convert reply photo or short video to animated WhatsApp sticker' },
+                { name: '.hd', cat: 'media', badge: 'free', desc: 'Upscale low-resolution image to ultra HD 4K clarity' },
+                { name: '.extractaudio', cat: 'media', badge: 'free', desc: 'Extract clear MP3 soundtrack from any video clip' },
+                // Tools
+                { name: '.pair', cat: 'tools', badge: 'free', desc: 'Generate new 8-digit web pairing code to link sub-bot' },
+                { name: '.ping', cat: 'tools', badge: 'free', desc: 'Test real-time bot response latency and server uptime' },
+                { name: '.alive', cat: 'tools', badge: 'free', desc: 'Display live status, uptime, developer (AHSAN) & channel' },
+                { name: '.calc <math>', cat: 'tools', badge: 'free', desc: 'Evaluate complex mathematical expressions and equations' },
+                { name: '.genpassword', cat: 'tools', badge: 'free', desc: 'Generate 16-character secure cryptographic password' },
+                { name: '.shortlink <url>', cat: 'tools', badge: 'free', desc: 'Convert long messy link into clean tiny URL' },
+                { name: '.checkid', cat: 'tools', badge: 'free', desc: 'Inspect current WhatsApp group ID or newsletter channel JID' },
+                { name: '.qr <text>', cat: 'tools', badge: 'free', desc: 'Generate scannable high-resolution QR code image' },
+                // Fun
+                { name: '.quote', cat: 'fun', badge: 'free', desc: 'Get daily motivational, wisdom, or humorous quotes' },
+                { name: '.fact', cat: 'fun', badge: 'free', desc: 'Display random educational and mind-blowing trivia facts' },
+                { name: '.riddle', cat: 'fun', badge: 'free', desc: 'Challenge group members with interactive riddles' },
+                { name: '.truth', cat: 'fun', badge: 'free', desc: 'Get deep or funny Truth questions for party games' },
+                { name: '.dare', cat: 'fun', badge: 'free', desc: 'Get exciting Dare challenges for group games' },
+                { name: '.coinflip', cat: 'fun', badge: 'free', desc: 'Flip a digital fair coin for Heads or Tails' },
+                { name: '.dice', cat: 'fun', badge: 'free', desc: 'Roll a random dice (1 to 6)' },
+                { name: '.rps <choice>', cat: 'fun', badge: 'free', desc: 'Play Rock-Paper-Scissors against the bot' },
+                { name: '.brat <text>', cat: 'fun', badge: 'free', desc: 'Generate viral Brat green album cover text card' },
+                // Owner
+                { name: '.bc <text>', cat: 'owner', badge: 'owner', desc: 'Broadcast announcement to all groups bot has joined' },
+                { name: '.bcuser <text>', cat: 'owner', badge: 'owner', desc: 'Broadcast notification to all private user chats' },
+                { name: '.addowner @user', cat: 'owner', badge: 'owner', desc: 'Authorize permanent secondary bot owner access' },
+                { name: '.listgrup', cat: 'owner', badge: 'owner', desc: 'View complete list and member counts of joined groups' },
+                { name: '.botstats', cat: 'owner', badge: 'owner', desc: 'Inspect live server RAM usage, CPU load and command stats' }
+            ];
+
+            const commandsGrid = document.getElementById('commandsGrid');
+            const cmdSearchInput = document.getElementById('cmdSearchInput');
+            const catPills = document.querySelectorAll('.cat-pill');
+            const commandCountBadge = document.getElementById('commandCountBadge');
+
+            let currentCategory = 'all';
+
+            function renderCommands() {
+                if (!commandsGrid) return;
+                const query = (cmdSearchInput.value || '').toLowerCase().trim();
+
+                const filtered = COMMANDS_DATA.filter(cmd => {
+                    const matchesCategory = (currentCategory === 'all' || cmd.cat === currentCategory);
+                    const matchesQuery = (!query || cmd.name.toLowerCase().includes(query) || cmd.desc.toLowerCase().includes(query));
+                    return matchesCategory && matchesQuery;
+                });
+
+                commandCountBadge.textContent = `${filtered.length} of 2000+ Commands`;
+
+                if (filtered.length === 0) {
+                    commandsGrid.innerHTML = `
+                        <div style="grid-column: 1 / -1; text-align: center; padding: 32px 16px; color: var(--text-dim);">
+                            <span style="font-size: 2rem; display: block; margin-bottom: 8px;">🔍</span>
+                            No commands matching "${query}". Try searching "ai", "kick", "mute", or "video".
+                        </div>
+                    `;
+                    return;
+                }
+
+                commandsGrid.innerHTML = filtered.map(cmd => {
+                    const badgeClass = cmd.badge === 'admin' ? 'badge-admin' : cmd.badge === 'owner' ? 'badge-owner' : 'badge-free';
+                    const triggerText = cmd.name.split(' ')[0];
+                    return `
+                        <div class="cmd-item-card">
+                            <div class="cmd-top">
+                                <span class="cmd-name">${cmd.name}</span>
+                                <span class="cmd-badge ${badgeClass}">${cmd.badge}</span>
+                            </div>
+                            <div class="cmd-desc">${cmd.desc}</div>
+                            <button class="cmd-copy-btn" onclick="navigator.clipboard.writeText('${triggerText}'); playBeep(900, 0.08); this.innerHTML='✓ Copied'; setTimeout(() => this.innerHTML='📋 Copy', 1200);">
+                                📋 Copy
+                            </button>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            renderCommands();
+
+            cmdSearchInput.addEventListener('input', () => {
+                renderCommands();
+            });
+
+            catPills.forEach(pill => {
+                pill.addEventListener('click', () => {
+                    catPills.forEach(p => p.classList.remove('active'));
+                    pill.classList.add('active');
+                    currentCategory = pill.dataset.category || 'all';
+                    renderCommands();
+                });
+            });
         });
     </script>
 </body>
