@@ -1,4 +1,4 @@
-﻿import { rpgCommands } from './rpgCommands.js';
+import { rpgCommands } from './rpgCommands.js';
 import { getReplyDelayOverride, setReplyDelayOverride } from '../lib/replyDelay.js';
 import { recallRealJid } from '../lib/lidMapping.js';
 import { rpgCommands2 } from './rpgCommands2.js';
@@ -107,9 +107,11 @@ function saveBotCfg() { save('botConfig'); }
 
 // Load saved config saat startup (mutasi settings langsung)
 ;(() => {
-    const cfg = botCfg();
-    if (typeof cfg.selfMode === 'boolean') settings.selfMode = cfg.selfMode;
-    if (typeof cfg.public  === 'boolean') settings.public   = cfg.public;
+    try {
+        const cfg = botCfg();
+        if (typeof cfg.selfMode === 'boolean') settings.selfMode = cfg.selfMode;
+        if (typeof cfg.public  === 'boolean') settings.public   = cfg.public;
+    } catch {}
 })();
 import { log } from '../lib/logger.js';
 import { getThumbnailImageContent } from '../lib/thumbnailSource.js';

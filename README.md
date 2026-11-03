@@ -16,7 +16,7 @@
   * **AI Supercharged:** Chatbot with smart persona, image generators, DALL-E, Puter.js.
   * **Media Downloaders:** YouTube, Instagram, TikTok, Facebook, Twitter/X, SoundCloud.
   * **Group Security:** Antilink, Antidelete, AntiNSFW, Anticall, Antispam, Auto-moderation.
-  * **RPG & Gaming:** Full RPG game engine, inventory, economy, farming, guilds, bosses.
+  * **Utilities & Converters:** Math solvers, encodings, image filters, and text generators.
   * **Jadibot / Sub-Bot Pairing:** Host multiple numbers on one bot instance.
 
 ---

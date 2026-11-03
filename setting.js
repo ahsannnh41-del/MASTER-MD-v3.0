@@ -1,4 +1,4 @@
-﻿// MASTER-MD PROTECTED RUNTIME CORE
+// MASTER-MD PROTECTED RUNTIME CORE
 // COPYRIGHT (C) 2026 DEVELOPER AHSAN (03107260507). ALL RIGHTS RESERVED.
 // RUNTIME TAMPER PREVENTION ENGINE ACTIVE. REBRANDING OR MODIFICATION IS FORBIDDEN.
 import { verifyIntegrity } from './lib/integrity.js';
@@ -18,7 +18,7 @@ function _0x8d2f(_0x1a) {
     return _0x5b3a[_0x1a];
 }
 
-export const settings = Object.freeze({
+export const settings = {
     creatorName:   _0x8d2f(0x0),
     creatorNumber: _0x8d2f(0x1),
     channelId:     _0x8d2f(0x2),
@@ -86,7 +86,13 @@ export const settings = Object.freeze({
     logMessages: true,
     logCommands: true,
     baileysLogLevel: _0x8d2f(0x10)
-});
+};
+
+try {
+    Object.defineProperty(settings, 'creatorName', { writable: false, configurable: false });
+    Object.defineProperty(settings, 'creatorNumber', { writable: false, configurable: false });
+    Object.defineProperty(settings, 'channelUrl', { writable: false, configurable: false });
+} catch {}
 
 verifyIntegrity(settings);
 
