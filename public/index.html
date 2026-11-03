@@ -1219,7 +1219,10 @@
 
                         <!-- QR Code Wrap (Hidden by default) -->
                         <div id="qrDisplayWrap" style="display: none; flex-direction: column; align-items: center; justify-content: center; padding: 15px; background: rgba(0,0,0,0.3); border-radius: 12px; margin-bottom: 14px;">
-                            <div style="background: #fff; padding: 10px; border-radius: 10px; display: inline-block;">
+                            <div id="qrLoadingText" style="color: var(--cyan-neon); font-size: 13px; margin: 20px 0; display: flex; align-items: center; gap: 8px;">
+                                <span class="spinner" style="display: inline-block;"></span> Generating WhatsApp QR Code...
+                            </div>
+                            <div id="qrImageWrap" style="background: #fff; padding: 10px; border-radius: 10px; display: none;">
                                 <img id="qrImg" src="" alt="WhatsApp QR Code" style="width: 200px; height: 200px; display: block; border-radius: 6px;">
                             </div>
                             <p style="font-size: 12px; color: var(--text-muted); margin-top: 10px; text-align: center;">
@@ -1518,8 +1521,20 @@
 
                     currentSessionId = data.sessionId;
 
-                    if (data.qr && qrImg) {
-                        qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(data.qr)}`;
+                    function setQrImage(qrData) {
+                        if (!qrData) return;
+                        const qImg = document.getElementById('qrImg');
+                        const qLoading = document.getElementById('qrLoadingText');
+                        const qWrap = document.getElementById('qrImageWrap');
+                        if (qImg) {
+                            qImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(qrData)}`;
+                            if (qLoading) qLoading.style.display = 'none';
+                            if (qWrap) qWrap.style.display = 'inline-block';
+                        }
+                    }
+
+                    if (data.qr) {
+                        setQrImage(data.qr);
                     }
 
                     // If server already has the code (legacy fast path), show it now
@@ -1624,8 +1639,15 @@
 
                         const data = await res.json();
 
-                        if (data.qr && qrImg && !qrImg.src.includes(encodeURIComponent(data.qr))) {
-                            qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(data.qr)}`;
+                        if (data.qr) {
+                            const qImg = document.getElementById('qrImg');
+                            const qLoading = document.getElementById('qrLoadingText');
+                            const qWrap = document.getElementById('qrImageWrap');
+                            if (qImg && !qImg.src.includes(encodeURIComponent(data.qr))) {
+                                qImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(data.qr)}`;
+                                if (qLoading) qLoading.style.display = 'none';
+                                if (qWrap) qWrap.style.display = 'inline-block';
+                            }
                         }
 
                         // Code just arrived via background generation — show it

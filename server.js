@@ -407,28 +407,35 @@ app.post('/api/pair', async (req, res) => {
         });
 
         // Fast & resilient pairing code request:
-        // Wait until WebSocket is in readyState 1 (OPEN), checking every 500ms
+        // Wait 3.5 seconds for socket connection to establish, then request pairing code directly
+        await delay(3500);
+
         let pairingCode = null;
-        for (let attempt = 1; attempt <= 6; attempt++) {
+        for (let attempt = 1; attempt <= 4; attempt++) {
             const currentSock = globalActiveSock || activeSock;
-            if (currentSock?.ws?.readyState === 1) {
-                try {
+            try {
+                if (currentSock && typeof currentSock.requestPairingCode === 'function') {
                     pairingCode = await currentSock.requestPairingCode(rawNumber);
-                    if (pairingCode) break;
-                } catch (err) {
-                    console.warn(`[Pairing attempt ${attempt} warning]:`, err.message);
+                    if (pairingCode) {
+                        console.log(`✅ [Pairing] Code generated on attempt ${attempt}: ${pairingCode}`);
+                        break;
+                    }
                 }
+            } catch (err) {
+                console.warn(`[Pairing attempt ${attempt} warning]:`, err.message);
             }
-            await delay(800);
+            if (attempt < 4) await delay(1500);
         }
 
         const rawCode = pairingCode ? String(pairingCode).trim() : null;
         const cur = sessions.get(sessionId) || {};
+        const finalQr = lastQrString || cur.qr || null;
+
         sessions.set(sessionId, {
             ...cur,
             status: rawCode ? 'waiting_for_user' : 'handshaking',
             code: rawCode,
-            qr: lastQrString,
+            qr: finalQr,
             sock: globalActiveSock || activeSock,
             phoneNumber: rawNumber
         });
@@ -439,11 +446,11 @@ app.post('/api/pair', async (req, res) => {
         } else {
             console.log(`⏳ Socket handshaking for ${rawNumber}, generating code in background...`);
             (async () => {
-                for (let bg = 1; bg <= 8; bg++) {
-                    await delay(1200);
+                for (let bg = 1; bg <= 6; bg++) {
+                    await delay(1500);
                     const currentSock = globalActiveSock || activeSock;
-                    if (currentSock?.ws?.readyState === 1) {
-                        try {
+                    try {
+                        if (currentSock && typeof currentSock.requestPairingCode === 'function') {
                             const code = await currentSock.requestPairingCode(rawNumber);
                             if (code) {
                                 const latest = sessions.get(sessionId) || {};
@@ -457,9 +464,9 @@ app.post('/api/pair', async (req, res) => {
                                 console.log(`✅ [Background] Pairing code ready for ${rawNumber}: ${code}`);
                                 break;
                             }
-                        } catch (e) {
-                            console.warn(`[Background pairing attempt ${bg}]:`, e.message);
                         }
+                    } catch (e) {
+                        console.warn(`[Background pairing attempt ${bg}]:`, e.message);
                     }
                 }
             })();
@@ -469,7 +476,7 @@ app.post('/api/pair', async (req, res) => {
             success: true,
             sessionId,
             code: rawCode,
-            qr: lastQrString,
+            qr: finalQr,
             phoneNumber: rawNumber,
             message: rawCode ? 'Pairing code generated successfully.' : 'Connecting to WhatsApp... code will appear shortly.'
         });
