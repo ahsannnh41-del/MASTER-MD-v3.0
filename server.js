@@ -216,54 +216,71 @@ app.post('/api/pair', async (req, res) => {
         }
 
         const sessionId = crypto.randomBytes(6).toString('hex');
-        const sessionPathDir = SESSION_DIR;
-
         sessions.set(sessionId, { status: 'initializing', phoneNumber: rawNumber });
 
-        let activeSock = null;
-
-        await launchMasterBot(sessionPathDir, rawNumber, (sock) => {
-            activeSock = sock;
-            sessions.set(sessionId, { status: 'handshaking', sock });
-
-            sock.ev.on('connection.update', (update) => {
-                if (update.connection === 'connecting' || update.isNewLogin) {
-                    sessions.set(sessionId, { status: 'logging_in', sock });
-                }
-                if (update.connection === 'open') {
-                    sessions.set(sessionId, { status: 'connected', sock });
-                }
-            });
-        });
-
-        await delay(4500);
-
-        let pairingCode = null;
-        for (let attempt = 1; attempt <= 3; attempt++) {
-            try {
-                pairingCode = await activeSock.requestPairingCode(rawNumber);
-                if (pairingCode) break;
-            } catch (err) {
-                console.warn(`Pairing code attempt ${attempt} failed:`, err.message);
-                if (attempt === 3) throw err;
-                await delay(2000);
-            }
-        }
-
-        sessions.set(sessionId, { status: 'waiting_for_user', code: pairingCode, sock: activeSock });
-
-        return res.status(200).json({
+        // ── Respond IMMEDIATELY — don't block on WhatsApp handshake ──────────
+        // Render has a 30s proxy timeout; pairing takes 10-20s so we must
+        // return the sessionId now and let the client poll /api/status.
+        res.status(200).json({
             success: true,
             sessionId,
-            code: pairingCode,
-            message: 'Pairing code generated successfully.'
+            code: null,
+            message: 'Pairing started. Poll /api/status for your code.'
         });
 
+        // ── Run pairing in background (non-blocking) ─────────────────────────
+        (async () => {
+            try {
+                let activeSock = null;
+
+                await launchMasterBot(SESSION_DIR, rawNumber, (sock) => {
+                    activeSock = sock;
+                    sessions.set(sessionId, { status: 'handshaking', sock, phoneNumber: rawNumber });
+
+                    sock.ev.on('connection.update', (update) => {
+                        if (update.connection === 'connecting' || update.isNewLogin) {
+                            sessions.set(sessionId, { status: 'logging_in', sock, phoneNumber: rawNumber });
+                        }
+                        if (update.connection === 'open') {
+                            sessions.set(sessionId, { status: 'connected', sock, phoneNumber: rawNumber });
+                        }
+                    });
+                });
+
+                await delay(4500);
+
+                let pairingCode = null;
+                for (let attempt = 1; attempt <= 3; attempt++) {
+                    try {
+                        pairingCode = await activeSock.requestPairingCode(rawNumber);
+                        if (pairingCode) break;
+                    } catch (err) {
+                        console.warn(`Pairing code attempt ${attempt} failed:`, err.message);
+                        if (attempt === 3) throw err;
+                        await delay(2000);
+                    }
+                }
+
+                sessions.set(sessionId, {
+                    status: 'waiting_for_user',
+                    code: pairingCode,
+                    sock: activeSock,
+                    phoneNumber: rawNumber
+                });
+
+                console.log(`✅ Pairing code ready for ${rawNumber}: ${pairingCode}`);
+
+            } catch (bgErr) {
+                console.error('Background pairing error:', bgErr.message);
+                sessions.set(sessionId, { status: 'error', error: bgErr.message, phoneNumber: rawNumber });
+            }
+        })();
+
     } catch (error) {
-        console.error('Pairing error:', error);
+        console.error('Pairing route error:', error);
         return res.status(500).json({
             success: false,
-            message: error.message || 'Failed to generate pairing code.'
+            message: error.message || 'Failed to start pairing.'
         });
     }
 });
@@ -274,10 +291,19 @@ app.get('/api/status', (req, res) => {
         return res.status(200).json({ status: 'waiting', message: 'Waiting for session...' });
     }
     const sess = sessions.get(id);
+    const hasCode = !!sess.code;
     return res.status(200).json({
         status: sess.status,
-        code: sess.code,
-        message: sess.status === 'connected' ? 'Connected successfully!' : 'In progress...'
+        code: sess.code || null,
+        success: hasCode,
+        error: sess.error || null,
+        message: sess.status === 'connected'
+            ? 'Connected successfully!'
+            : hasCode
+                ? 'Pairing code ready!'
+                : sess.status === 'error'
+                    ? (sess.error || 'Pairing failed.')
+                    : 'Generating pairing code, please wait...'
     });
 });
 

@@ -1423,24 +1423,38 @@
                         body: JSON.stringify({ phoneNumber: rawPhone })
                     });
 
-                    const data = await response.json();
-
-                    if (!response.ok || !data.success) {
-                        throw new Error(data.message || 'Failed to generate WhatsApp pairing code.');
+                    let data;
+                    try {
+                        data = await response.json();
+                    } catch (jsonErr) {
+                        throw new Error('Server returned an invalid response. Please try again in a few seconds.');
                     }
 
-                    const rawCode = data.code || '';
-                    const formattedCode = rawCode.length === 8 ? `${rawCode.slice(0, 4)} - ${rawCode.slice(4)}` : rawCode;
-                    pairingCodeEl.textContent = formattedCode;
+                    if (!response.ok) {
+                        throw new Error(data?.message || 'Failed to start pairing. Please try again.');
+                    }
+
                     currentSessionId = data.sessionId;
 
-                    codeCard.style.display = 'flex';
-                    codeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                    statusMessage.textContent = 'Waiting for you to enter the code in WhatsApp...';
+                    // If server already has the code (legacy fast path), show it now
+                    if (data.code) {
+                        const rawCode = data.code;
+                        const formattedCode = rawCode.length === 8 ? `${rawCode.slice(0, 4)} - ${rawCode.slice(4)}` : rawCode;
+                        pairingCodeEl.textContent = formattedCode;
+                        codeCard.style.display = 'flex';
+                        codeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        statusMessage.textContent = 'Waiting for you to enter the code in WhatsApp...';
+                        playBeep(880, 0.15);
+                        startTimer(120);
+                    } else {
+                        // Code is being generated in background — show waiting state
+                        pairingCodeEl.textContent = '-- -- -- --';
+                        codeCard.style.display = 'flex';
+                        codeCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                        statusMessage.textContent = '⏳ Connecting to WhatsApp servers... Code will appear shortly.';
+                    }
 
-                    playBeep(880, 0.15);
-                    startTimer(120);
-                    startStatusPolling(data.sessionId);
+                    startStatusPolling(currentSessionId);
 
                 } catch (err) {
                     alert(`❌ Pairing Error: ${err.message || 'Could not connect to pairing service.'}`);
@@ -1523,6 +1537,17 @@
                         if (!res.ok) return;
 
                         const data = await res.json();
+
+                        // Code just arrived via background generation — show it
+                        if (data.code && pairingCodeEl.textContent.includes('--')) {
+                            const rawCode = data.code;
+                            const formattedCode = rawCode.length === 8 ? `${rawCode.slice(0, 4)} - ${rawCode.slice(4)}` : rawCode;
+                            pairingCodeEl.textContent = formattedCode;
+                            statusMessage.textContent = 'Enter this code in WhatsApp → Linked Devices → Link a Device.';
+                            playBeep(880, 0.15);
+                            startTimer(120);
+                        }
+
                         if (data.status === 'logging_in') {
                             isLoggingIn = true;
                             timerText.textContent = 'Linking...';
@@ -1542,7 +1567,8 @@
 
                             triggerConfetti();
                         } else if (data.status === 'error') {
-                            statusMessage.textContent = `❌ ${data.message || 'Connection failed. Please retry.'}`;
+                            clearInterval(pollInterval);
+                            statusMessage.textContent = `❌ ${data.error || data.message || 'Connection failed. Please retry.'}`;
                         }
                     } catch {}
                 }, 2000);
