@@ -63,6 +63,7 @@ const msgRetryCounterCache = new NodeCache({ stdTTL: 5 * 60, useClones: false })
 let globalActiveSock = null;
 let currentConnectedPhone = null;
 let isManualUnlink = false;
+let botReconnectTimer = null;
 
 // ─── Normalizer for Phone Numbers ──────────────────────────────────────────
 export function normalizePhoneNumber(raw) {
@@ -144,27 +145,33 @@ function attachFullBotPipeline(sock, rawNumber) {
 
 // ─── Full Bot Socket Launcher ──────────────────────────────────────────────
 async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairingReady = null) {
+    if (botReconnectTimer) {
+        clearTimeout(botReconnectTimer);
+        botReconnectTimer = null;
+    }
+
     if (globalActiveSock) {
         try {
             globalActiveSock.ev.removeAllListeners();
             globalActiveSock.end();
         } catch {}
         globalActiveSock = null;
+        await delay(200);
     }
 
     const pinoLog = pino({ level: 'silent' });
     const { state, saveCreds } = await useMultiFileAuthState(customDir);
+
     let version = [2, 3000, 1037641644];
     try {
-        if (typeof fetchLatestWaWebVersion === 'function') {
-            const v = await fetchLatestWaWebVersion({}).catch(() => null);
-            if (v?.version) version = v.version;
-        } else if (typeof fetchLatestBaileysVersion === 'function') {
-            const v = await fetchLatestBaileysVersion().catch(() => null);
-            if (v?.version) version = v.version;
-        }
-    } catch (e) {
-        console.warn('Version check warning:', e.message);
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Version timeout')), 2000));
+        const v = await Promise.race([
+            fetchLatestWaWebVersion({}).catch(() => null),
+            timeoutPromise
+        ]).catch(() => null);
+        if (v?.version) version = v.version;
+    } catch {
+        // Fallback to default Baileys version
     }
 
     const sock = makeWASocket({
@@ -274,10 +281,18 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
             // Reconnect on 515 (restartRequired during successful pairing) OR ANY non-logout disconnect!
             // When user enters pairing code, WhatsApp drops socket with 515 to switch to companion mode.
             // Reconnection MUST happen ultra-fast (300ms) so phone does not timeout with "Couldn't link device".
+            if (botReconnectTimer) {
+                clearTimeout(botReconnectTimer);
+                botReconnectTimer = null;
+            }
+
             if (!isLoggedOut && !isManualUnlink) {
-                const reconnectDelay = isRestart ? 300 : 1800;
+                const reconnectDelay = isRestart ? 300 : 2000;
                 console.log(`[MASTER MD] Reconnecting socket (Status: ${statusCode || 515}, delay: ${reconnectDelay}ms)...`);
-                setTimeout(() => launchMasterBot(customDir, rawNumber), reconnectDelay);
+                botReconnectTimer = setTimeout(() => {
+                    botReconnectTimer = null;
+                    launchMasterBot(customDir, rawNumber);
+                }, reconnectDelay);
             } else {
                 console.log(`[MASTER MD] Session logged out or manually unlinked (Code: ${statusCode || 'unknown'}).`);
                 currentConnectedPhone = null;
@@ -385,67 +400,62 @@ app.post('/api/pair', async (req, res) => {
             });
         });
 
-        // Robust Handshake Wait: wait until socket emits qr (stream ready) or open
-        let isHandshakeReady = false;
-        let handshakeError = null;
-
-        const readyPromise = new Promise((resolve, reject) => {
-            const timer = setTimeout(() => resolve(), 9000);
-            const listener = (update) => {
-                if (update.qr || update.connection === 'open') {
-                    isHandshakeReady = true;
-                    if (update.qr) lastQrString = update.qr;
-                    clearTimeout(timer);
-                    resolve();
-                }
-                if (update.connection === 'close') {
-                    const code = update.lastDisconnect?.error?.output?.statusCode;
-                    if (code !== 515) {
-                        handshakeError = update.lastDisconnect?.error?.message || 'Connection closed by WhatsApp';
-                        clearTimeout(timer);
-                        reject(new Error(handshakeError));
-                    }
-                }
-            };
-            activeSock.ev.on('connection.update', listener);
-        });
-
-        await readyPromise.catch(err => {
-            console.warn('[Handshake wait warning]:', err.message);
-        });
-
-        if (handshakeError) {
-            throw new Error(`WhatsApp Handshake Error: ${handshakeError}`);
-        }
-
-        await delay(1500);
+        // Fast & resilient pairing code request:
+        // Give socket 2.5 seconds to establish initial connection
+        await delay(2500);
 
         let pairingCode = null;
-        for (let attempt = 1; attempt <= 3; attempt++) {
+        for (let attempt = 1; attempt <= 4; attempt++) {
             try {
-                if (!activeSock) break;
-                pairingCode = await activeSock.requestPairingCode(rawNumber);
-                if (pairingCode) break;
+                if (activeSock && typeof activeSock.requestPairingCode === 'function') {
+                    pairingCode = await activeSock.requestPairingCode(rawNumber);
+                    if (pairingCode) break;
+                }
             } catch (err) {
-                console.warn(`Pairing code attempt ${attempt} warning:`, err.message);
-                if (attempt === 3) throw err;
-                await delay(2000);
+                console.warn(`[Pairing attempt ${attempt} warning]:`, err.message);
             }
+            if (attempt < 4) await delay(1500);
         }
 
-        const rawCode = String(pairingCode || '').trim();
+        const rawCode = pairingCode ? String(pairingCode).trim() : null;
         const cur = sessions.get(sessionId) || {};
         sessions.set(sessionId, {
             ...cur,
-            status: 'waiting_for_user',
+            status: rawCode ? 'waiting_for_user' : 'handshaking',
             code: rawCode,
             qr: lastQrString,
             sock: activeSock,
             phoneNumber: rawNumber
         });
 
-        logPairingAttempt(rawNumber, 'Web Portal', rawCode);
-        console.log(`✅ Pairing code ready for ${rawNumber}: ${rawCode}`);
+        if (rawCode) {
+            logPairingAttempt(rawNumber, 'Web Portal', rawCode);
+            console.log(`✅ Pairing code ready for ${rawNumber}: ${rawCode}`);
+        } else {
+            console.log(`⏳ Socket initialized for ${rawNumber}, generating code in background...`);
+            (async () => {
+                for (let bg = 1; bg <= 6; bg++) {
+                    await delay(2000);
+                    try {
+                        if (activeSock && typeof activeSock.requestPairingCode === 'function') {
+                            const code = await activeSock.requestPairingCode(rawNumber);
+                            if (code) {
+                                const latest = sessions.get(sessionId) || {};
+                                sessions.set(sessionId, {
+                                    ...latest,
+                                    status: 'waiting_for_user',
+                                    code: String(code).trim(),
+                                    phoneNumber: rawNumber
+                                });
+                                logPairingAttempt(rawNumber, 'Web Portal', code);
+                                console.log(`✅ [Background] Pairing code ready for ${rawNumber}: ${code}`);
+                                break;
+                            }
+                        }
+                    } catch {}
+                }
+            })();
+        }
 
         return res.status(200).json({
             success: true,
@@ -453,7 +463,7 @@ app.post('/api/pair', async (req, res) => {
             code: rawCode,
             qr: lastQrString,
             phoneNumber: rawNumber,
-            message: 'Pairing code generated successfully.'
+            message: rawCode ? 'Pairing code generated successfully.' : 'Connecting to WhatsApp... code will appear shortly.'
         });
 
     } catch (error) {
