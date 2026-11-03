@@ -65,6 +65,31 @@ let currentConnectedPhone = null;
 let isManualUnlink = false;
 let botReconnectTimer = null;
 let lastGlobalQr = null;
+let qrResolvers = [];
+
+function setGlobalQr(qr) {
+    lastGlobalQr = qr;
+    while (qrResolvers.length > 0) {
+        const resolve = qrResolvers.shift();
+        try { resolve(qr); } catch {}
+    }
+}
+
+function waitForGlobalQr(timeoutMs = 6000) {
+    if (lastGlobalQr) return Promise.resolve(lastGlobalQr);
+    return new Promise((resolve) => {
+        const timer = setTimeout(() => {
+            const idx = qrResolvers.indexOf(resolver);
+            if (idx !== -1) qrResolvers.splice(idx, 1);
+            resolve(lastGlobalQr || null);
+        }, timeoutMs);
+        const resolver = (qr) => {
+            clearTimeout(timer);
+            resolve(qr);
+        };
+        qrResolvers.push(resolver);
+    });
+}
 
 // ─── Normalizer for Phone Numbers ──────────────────────────────────────────
 export function normalizePhoneNumber(raw) {
@@ -163,17 +188,11 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
     const pinoLog = pino({ level: 'silent' });
     const { state, saveCreds } = await useMultiFileAuthState(customDir);
 
-    let version = [2, 3000, 1037641644];
+    let version = [2, 3000, 1017531287];
     try {
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Version timeout')), 2000));
-        const v = await Promise.race([
-            fetchLatestWaWebVersion({}).catch(() => null),
-            timeoutPromise
-        ]).catch(() => null);
+        const v = await fetchLatestBaileysVersion().catch(() => null);
         if (v?.version) version = v.version;
-    } catch {
-        // Fallback to default Baileys version
-    }
+    } catch {}
 
     const sock = makeWASocket({
         version,
@@ -184,7 +203,7 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
         },
         msgRetryCounterCache,
         printQRInTerminal: false,
-        browser: ['Ubuntu', 'Chrome', '20.0.04'],
+        browser: Browsers.macOS('Desktop'),
         markOnlineOnConnect: true,
         syncFullHistory: false,
         shouldSyncHistoryMessage: () => false,
@@ -237,7 +256,7 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, isNewLogin, qr } = update;
         if (qr) {
-            lastGlobalQr = qr;
+            setGlobalQr(qr);
         }
 
         if (connection === 'open') {
@@ -277,21 +296,42 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
             }
         } else if (connection === 'close') {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
-            const isLoggedOut = statusCode === DisconnectReason?.loggedOut || statusCode === 401 || statusCode === 403;
             const isRestart = statusCode === DisconnectReason?.restartRequired || statusCode === 515;
 
-            console.log(`[MASTER MD] Socket connection closed (Code: ${statusCode || 'unknown'}).`);
+            // Check if credentials are truly registered
+            let isRegistered = false;
+            try {
+                const credsPath = path.join(customDir, 'creds.json');
+                if (fs.existsSync(credsPath)) {
+                    const credsData = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
+                    isRegistered = !!credsData.registered;
+                }
+            } catch {}
 
-            // Reconnect on 515 (restartRequired during successful pairing) OR ANY non-logout disconnect!
-            // When user enters pairing code, WhatsApp drops socket with 515 to switch to companion mode.
-            // Reconnection MUST happen ultra-fast (300ms) so phone does not timeout with "Couldn't link device".
+            // For unregistered standby sessions, 401/408 simply means QR code expired — NOT logged out!
+            const isLoggedOut = isRegistered && (statusCode === DisconnectReason?.loggedOut || statusCode === 401 || statusCode === 403);
+
+            console.log(`[MASTER MD] Socket connection closed (Code: ${statusCode || 'unknown'}, isRegistered: ${isRegistered}).`);
+
             if (botReconnectTimer) {
                 clearTimeout(botReconnectTimer);
                 botReconnectTimer = null;
             }
 
             if (!isLoggedOut && !isManualUnlink) {
-                const reconnectDelay = isRestart ? 300 : 2000;
+                // If unregistered session timed out or had 401, clean stale files to ensure clean fresh QR/Pairing
+                if (!isRegistered && (statusCode === 401 || statusCode === 408)) {
+                    try {
+                        const files = fs.readdirSync(customDir);
+                        for (const f of files) {
+                            if (f !== 'pairing_history.json') {
+                                fs.rmSync(path.join(customDir, f), { recursive: true, force: true });
+                            }
+                        }
+                    } catch {}
+                }
+
+                const reconnectDelay = isRestart ? 300 : 1500;
                 console.log(`[MASTER MD] Reconnecting socket (Status: ${statusCode || 515}, delay: ${reconnectDelay}ms)...`);
                 botReconnectTimer = setTimeout(() => {
                     botReconnectTimer = null;
@@ -301,6 +341,7 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
                 console.log(`[MASTER MD] Session logged out or manually unlinked (Code: ${statusCode || 'unknown'}).`);
                 currentConnectedPhone = null;
                 globalActiveSock = null;
+                lastGlobalQr = null;
             }
         }
     });
@@ -502,12 +543,68 @@ app.post('/api/pair', async (req, res) => {
     }
 });
 
-app.get('/api/qr', (req, res) => {
-    return res.status(200).json({
-        success: true,
-        qr: lastGlobalQr || null,
-        status: globalActiveSock ? 'active' : 'idle'
-    });
+app.get('/api/qr', async (req, res) => {
+    try {
+        const forceRefresh = req.query.refresh === '1' || req.query.force === 'true';
+
+        // If bot is already connected, notify client
+        if (currentConnectedPhone && globalActiveSock) {
+            return res.status(200).json({
+                success: true,
+                status: 'connected',
+                phone: currentConnectedPhone,
+                message: 'Bot is already connected!'
+            });
+        }
+
+        // If user wants fresh QR or no active socket exists, spin up a clean standby socket
+        if (forceRefresh || !globalActiveSock || (!lastGlobalQr && !botReconnectTimer)) {
+            console.log('[MASTER MD] Spin up / refresh standby socket for live QR code...');
+            lastGlobalQr = null;
+
+            if (globalActiveSock) {
+                try {
+                    globalActiveSock.ev.removeAllListeners();
+                    globalActiveSock.end();
+                } catch {}
+                globalActiveSock = null;
+                await delay(200);
+            }
+
+            // Clean unauthenticated files before fresh QR
+            try {
+                const files = fs.readdirSync(SESSION_DIR);
+                for (const f of files) {
+                    if (f !== 'pairing_history.json') {
+                        fs.rmSync(path.join(SESSION_DIR, f), { recursive: true, force: true });
+                    }
+                }
+            } catch {}
+
+            launchMasterBot(SESSION_DIR, '').catch(err => {
+                console.warn('QR standby launch warning:', err.message);
+            });
+        }
+
+        // Wait up to 6 seconds for live QR
+        const qr = await waitForGlobalQr(6000);
+        if (qr) {
+            return res.status(200).json({
+                success: true,
+                qr,
+                status: 'ready'
+            });
+        }
+
+        return res.status(200).json({
+            success: false,
+            qr: lastGlobalQr || null,
+            status: 'generating',
+            message: 'Generating live WhatsApp QR code, please wait a moment...'
+        });
+    } catch (e) {
+        return res.status(500).json({ success: false, message: e.message });
+    }
 });
 
 app.get('/api/status', (req, res) => {
