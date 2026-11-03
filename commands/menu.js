@@ -661,10 +661,10 @@ function buildRegistryCategoryPack(category, label = category) {
     return `\n${blocks}`;
 }
 
-// ─── MAIN MENU (INTERACTIVE NATIVEFLOW BUTTONS) ─────────────────
+// ─── MAIN MENU (ORIGINAL INTERACTIVE NATIVEFLOW BUTTONS) ─────────
 export async function sendMainMenu(reply, sender, sock, jid, msg, opts = {}) {
     const now     = Date.now();
-    const { isOwner = false, isPremium = false, pushName = null, botStartTime = now, totalFeatures = 0 } = opts;
+    const { isOwner = false, isPremium = false, pushName = null, botStartTime = now, totalFeatures = 0, featureList = [] } = opts;
 
     if (sock && jid) {
         try { await sock.sendPresenceUpdate('composing', jid); } catch { /* ignore */ }
@@ -712,111 +712,129 @@ ${sc('Fast')} • ${sc('Stable')} • ${sc('Secure')}
 👑 *Developer:* AHSAN (03107260507)
 📢 *Official Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46`;
 
-    markMenuPending(sender);
-
-    // ── Attempt 1: NativeFlow interactive buttons with image header ──────
+    // ── Attempt 1: NativeFlow buttonsMessage with interactive list & biz nodes ──
     if (sock && jid) {
         try {
-            const { generateWAMessageFromContent, prepareWAMessageMedia, proto } = await import('@whiskeysockets/baileys');
+            const { generateWAMessageFromContent, prepareWAMessageMedia } = await import('@whiskeysockets/baileys');
 
-            // Pre-warm group metadata (required for correct encryption on relayMessage)
+            // Pre-warm group metadata for encryption in groups
             if (jid.endsWith('@g.us')) {
                 try {
                     await withTimeout(getGroupMetadata(sock, jid), 15_000, 'getGroupMetadata(menu)');
                 } catch (metaErr) {
-                    log?.warn?.(`[menu] metadata pre-warm: ${metaErr.message}`);
+                    log?.warn?.(`[menu] metadata pre-warm warning: ${metaErr.message}`);
                 }
             }
 
-            // Upload thumbnail as image header
+            // Upload thumbnail as header image
             let headerImageMessage = null;
             try {
                 const imgContent = getThumbnailImageContent();
                 const media = await withTimeout(
                     prepareWAMessageMedia(imgContent, { upload: sock.waUploadToServer }),
-                    20_000,
+                    25_000,
                     'prepareWAMessageMedia(menuThumbnail)'
                 );
                 headerImageMessage = media.imageMessage;
             } catch (thumbErr) {
-                log?.warn?.(`[menu] thumbnail upload: ${thumbErr.message}`);
+                log?.warn?.(`[menu] thumbnail upload warning: ${thumbErr.message}`);
             }
 
-            // Build NativeFlow quick_reply buttons
-            const buttons = [
-                { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '📋 All Commands (2000+)', id: `${P}allmenu` }) },
-                { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '🛡️ Admin Tools',         id: `${P}menuadmin` }) },
-                { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '📥 Media & Download',    id: `${P}menumedia` }) },
-                { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '🛠️ Tools & Utils',       id: `${P}menutools` }) },
-                { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '🎮 Fun & Games',         id: `${P}menufun` }) },
-                { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '🧠 AI Supercharged',     id: `${P}ai` }) },
-                { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '⚡ Ping & Speed',        id: `${P}ping` }) },
-                { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '🔑 Web Pairing',         id: `${P}pair` }) },
-                { name: 'quick_reply', buttonParamsJson: JSON.stringify({ display_text: '👑 Developer Info',      id: `${P}owner` }) },
+            // Interactive list rows (100% English, zero RPG)
+            const rows = [
+                { title: '🤖 All Commands (2000+)', description: 'View complete directory of all features', id: `${P}allmenu` },
+                { title: '👑 Developer Info',      description: 'Contact AHSAN (03107260507)',              id: `${P}owner` },
+                { title: '⚡ Ping & Status',        description: 'Check latency & server performance',       id: `${P}ping` },
+                { title: '📢 Official Channel',    description: 'Join WhatsApp channel updates',            id: `${P}credits` },
+                { title: '🔑 Web Pairing',         description: 'Generate web pairing code',               id: `${P}pair` },
+                { title: '📜 Bot Rules',           description: 'Usage policy & guidelines',                id: `${P}rules` },
+                { title: '📞 Support Desk',        description: 'Help & community support',                 id: `${P}support` },
+                { title: '🛡️ Admin Suite',        description: 'Group moderation, kicks & locks',          id: `${P}menuadmin` },
+                { title: '🛠️ Utility Tools',       description: 'Converters, search & utilities',           id: `${P}menutools` },
+                { title: '📥 Media & Downloader',  description: 'Download video, audio & media',            id: `${P}menumedia` },
+                { title: '🎮 Fun & Entertainment', description: 'Games, jokes & interactive tools',          id: `${P}menufun` },
+                { title: '🧠 Artificial Intel',   description: 'Smart AI responses & prompts',             id: `${P}ai` },
+                { title: '🤖 Bot Core Settings',   description: 'Bot configuration & diagnostics',          id: `${P}menubot` },
             ];
 
-            const interactiveMessage = proto.Message.InteractiveMessage.create({
-                body: proto.Message.InteractiveMessage.Body.create({
-                    text: menuText
-                }),
-                footer: proto.Message.InteractiveMessage.Footer.create({
-                    text: `© ${BOT} • Developed by AHSAN (03107260507)`
-                }),
-                header: headerImageMessage
-                    ? proto.Message.InteractiveMessage.Header.create({
-                        hasMediaAttachment: true,
-                        imageMessage: headerImageMessage
-                    })
-                    : proto.Message.InteractiveMessage.Header.create({
-                        title: BOT,
-                        hasMediaAttachment: false
-                    }),
-                nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({ buttons })
+            const channelLink = settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46';
+
+            const waMsg = generateWAMessageFromContent(jid, {
+                buttonsMessage: {
+                    contentText: `${menuText}\n\n👇 *Tap buttons below or select from menu list:*`,
+                    footerText: `© ${BOT} • Developed by AHSAN (03107260507)`,
+                    ...(headerImageMessage
+                        ? { headerType: 4, imageMessage: headerImageMessage }
+                        : { headerType: 1 }),
+                    viewOnce: true,
+                    buttons: [
+                        {
+                            buttonId: `${P}allmenu`,
+                            buttonText: { displayText: '🤖 All Commands' },
+                            type: 1,
+                        },
+                        {
+                            buttonId: 'official_channel',
+                            buttonText: { displayText: '📢 Official Channel' },
+                            type: 1,
+                            nativeFlowInfo: {
+                                name: 'cta_url',
+                                paramsJson: JSON.stringify({
+                                    display_text: '📢 Official Channel',
+                                    url: channelLink,
+                                    merchant_url: channelLink,
+                                }),
+                            },
+                        },
+                        {
+                            buttonId: 'menu_list',
+                            buttonText: { displayText: '☰ Explore Features' },
+                            type: 1,
+                            nativeFlowInfo: {
+                                name: 'single_select',
+                                paramsJson: JSON.stringify({
+                                    title: `${BOT} Menu Directory`,
+                                    sections: [
+                                        {
+                                            title: '⚡ QUICK SHORTCUTS',
+                                            rows: rows.slice(0, 5)
+                                        },
+                                        {
+                                            title: '🛠️ FEATURE SUITES',
+                                            rows: rows.slice(5)
+                                        }
+                                    ]
+                                })
+                            }
+                        }
+                    ]
+                }
+            }, { quoted: msg, userJid: sock.user?.jid || sock.user?.id });
+
+            await sock.relayMessage(jid, waMsg.message, {
+                messageId: waMsg.key.id,
+                additionalNodes: [{
+                    tag: 'biz',
+                    attrs: {},
+                    content: [{
+                        tag: 'interactive',
+                        attrs: { type: 'native_flow', v: '1' },
+                        content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }]
+                    }]
+                }],
             });
 
-            const waMessage = generateWAMessageFromContent(
-                jid,
-                {
-                    viewOnceMessage: {
-                        message: {
-                            messageContextInfo: {
-                                deviceListMetadata: {},
-                                deviceListMetadataVersion: 2
-                            },
-                            interactiveMessage
-                        }
-                    }
-                },
-                { userJid: sock.user.id }
-            );
-
-            await withTimeout(
-                sock.relayMessage(jid, waMessage.message, { messageId: waMessage.key.id }),
-                30_000,
-                'relayMessage(menuButtons)'
-            );
+            markMenuPending(sender);
             return;
         } catch (err) {
-            console.error(`[menu] NativeFlow buttons FAILED: ${err?.stack || err?.message || err}`);
-            log?.warn?.(`[menu] NativeFlow buttons failed: ${err.message} — trying image fallback`);
-        }
-
-        // ── Attempt 2: Plain image + caption fallback ──────────────────────
-        try {
-            const imageContent = getThumbnailImageContent();
-            await withTimeout(
-                sock.sendMessage(jid, { ...imageContent, caption: menuText }, { quoted: msg }),
-                30_000,
-                'sendMessage(menuImageFallback)'
-            );
-            return;
-        } catch (err2) {
-            log?.warn?.(`[menu] Image fallback failed: ${err2.message} — sending plain text`);
+            console.error('[menu] Interactive buttons relay failed:', err?.message || err);
+            log?.warn?.(`[menu] Interactive buttons failed: ${err.message} — trying image fallback`);
         }
     }
 
-    // ── Attempt 3: Plain text last resort ─────────────────────────────
-    await reply(menuText);
+    // ── Attempt 2: Fallback image + caption ──────────────────────────
+    markMenuPending(sender);
+    await sendMenuReply(sock, jid, msg, settings.thumbnailUrl, menuText);
 }
 
 const SAFE_CAPTION_LIMIT = 1000;
