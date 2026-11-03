@@ -214,7 +214,7 @@ export function makeListServerHandler(version) {
     };
 }
 
-export function makeDeleteServerHandler(version) {
+export function makeDelServerHandler(version) {
     return async (ctx) => {
         const isBotOwnerOrCreator = ctx.isOwner || ctx.isCreator;
         if (!hasFullAccess(ctx.sender, version, isBotOwnerOrCreator)) {
@@ -236,6 +236,8 @@ export function makeDeleteServerHandler(version) {
         }
     };
 }
+
+export const makeDeleteServerHandler = makeDelServerHandler;
 
 export function makeServerInfoHandler(version) {
     return async (ctx) => {
