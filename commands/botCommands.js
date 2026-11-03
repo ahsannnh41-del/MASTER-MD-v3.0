@@ -114,12 +114,12 @@ export async function showCredits(ctx) {
 }
 
 export async function showSupport(ctx) {
-    const creator = settings.ownerNumber ? `+${settings.ownerNumber}` : '(lihat .owner)';
-    const txt = `🆘 *BUTUH BANTUAN?*\n\n` +
-        `1. Cek dulu \`.allmenu\` — mungkin jawabannya di situ\n` +
-        `2. Kirim saran/laporan bug lewat \`.suggest [pesan]\`\n` +
-        `3. Hubungi langsung: ${creator} (\`.owner\` untuk detail)\n\n` +
-        `Sabar ya, biasanya dibalas secepatnya! 🙌`;
+    const txt = `🆘 *MASTER MD SUPPORT & ASSISTANCE*\n\n` +
+        `1. Check \`.allmenu\` or \`.menu\` for full command instructions.\n` +
+        `2. Report issues or request features via \`.suggest [message]\`.\n` +
+        `3. Direct Developer Contact: +923107260507 (\`.owner\` for details).\n` +
+        `4. Join Official Channel: ${settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46'}\n\n` +
+        `⚡ Quick response guaranteed for all inquiries!`;
     return ctx.reply(txt);
 }
 

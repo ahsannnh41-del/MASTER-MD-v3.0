@@ -183,7 +183,7 @@ export async function replyWithImage(sock, jid, quotedMsg, imageUrl, text) {
     const full = safeReplyText(text);
     const tooLongForCaption = full.length > SAFE_CAPTION_LIMIT;
     const caption = tooLongForCaption
-        ? `${truncate(full, SAFE_CAPTION_LIMIT)}\n\n👇 _Lanjutan di pesan berikutnya..._`
+        ? `${truncate(full, SAFE_CAPTION_LIMIT)}\n\n👇 _Full details arriving in next message..._`
         : full;
 
     if (imageUrl) {
@@ -621,25 +621,22 @@ reg(['owner', 'creator', 'dev', 'developer'], async (ctx) => {
     const extraOwners = owners.filter(o => o.number !== mainOwnerNum);
     const ownerLines = extraOwners.length
         ? extraOwners.map((o, i) => `${i + 1}. +${o.number}`).join('\n')
-        : '_(belum ada Owner tambahan — pakai .addowner atau edit `ownerNumbers` di setting.js)_';
+        : '_(No secondary owners assigned — use .addowner to assign)_';
     await ctx.reply(
-`👑 *INFO CREATOR & OWNER*
+`╔══════════════════════════════════════╗
+║   👑 *DEVELOPER & OWNER INFO* 👑   ║
+╚══════════════════════════════════════╝
 
-◈ *Creator* : ${creator.name}
-◈ *Nomor*   : +${creator.number}
-_(Creator tidak bisa diganti lewat command apapun)_
+◈ *Developer* : AHSAN
+◈ *WhatsApp*  : +923107260507
+◈ *Role*      : Lead Architect & Creator
 
-⭐ *${settings.ownerName || 'Owner'}*${mainOwnerNum ? `\n◈ *Nomor* : +${mainOwnerNum}` : '\n_(belum diisi — set `ownerName` & `ownerNumber` di setting.js)_'}
+◈ *Bot*       : ${settings.botName} v${settings.botVersion || '3.0.0'}
+◈ *Status*    : 🟢 Online & Protected
+◈ *Channel*   : https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46
 
-📋 *Owner Lainnya:*
-${ownerLines}
-_(Nama & nomor Owner utama bisa diganti lewat setting.js: \`ownerName\` dan \`ownerNumber\`)_
-
-◈ *Bot* : ${settings.botName} v${settings.botVersion || '2.0.0'}
-
-📞 Hubungi Creator jika ada pertanyaan,\nlaporan bug, atau request fitur!
-
-_wa.me/${creator.number}_`
+${ownerLines !== '_(No secondary owners assigned — use .addowner to assign)_' ? `📋 *Assigned Owners:*\n${ownerLines}\n\n` : ''}💬 *Direct WhatsApp Chat:*
+https://wa.me/923107260507`
     );
 });
 
@@ -3897,77 +3894,58 @@ function menuSubcategory(name, category) {
 
     if (category === '🛡️ Admin') return adminSubcategory(name);
     if (category === '🛠️ Tools') {
-        if (/(quest|mission)/.test(n)) return '📜 Quest & Misi';
-        if (/(boss|raid|hunt|lawan|attack|defend|dodge|battle|duel)/.test(n)) return '⚔️ Pertarungan';
-        if (/explore/.test(n)) return '🗺️ Eksplorasi';
-        if (/scout/.test(n)) return '🔭 Scout & Penjelajahan';
-        if (/survive/.test(n)) return '🛡️ Survival';
-        if (/(treasure|loot|chest)/.test(n)) return '💎 Harta & Loot';
-        if (/fish/.test(n)) return '🎣 Memancing';
-        if (/mine/.test(n)) return '⛏️ Mining';
-        if (/(craft|refine|forge|upgrade)/.test(n)) return '🔨 Crafting & Upgrade';
-        if (/(farm|plant|water|harvest)/.test(n)) return '🌾 Berkebun';
-        if (/(cook|recipe)/.test(n)) return '🍳 Memasak';
-        if (/guild|clan/.test(n)) return '🏰 Guild & Clan';
-        if (/pet/.test(n)) return '🐾 Pet System';
-        if (/(class|profil|stat|inventory|equip|unequip|use|heal|revive|train)/.test(n)) return '👤 Karakter & Perlengkapan';
-        if (/(shop|toko|buy|sell|daily|job|kerja|bank|nabung|tarik|transfer|rob|economy|gold)/.test(n)) return '💰 Ekonomi & Toko';
-        if (/(ranking|leaderboard|marry|divorce)/.test(n)) return '🏆 Ranking & Sosial';
-        return '📦 RPG Lainnya';
-    }
-    if (category === '🛠️ Tools') {
-        if (/(binary|base|hex|morse|rot|caesar|vigenere|atbash|cipher|encode|decode|ascii)/.test(n)) return '🔐 Encoding & Kriptografi';
-        if (/(calc|persen|bmi|prima|faktorial|fibonacci|gcd|lcm|average|median|mode|fraction|interest|loan|roi|tax|discount|gpa|roman|area|volume|convert)/.test(n)) return '🔢 Matematika & Konversi';
-        if (/(upper|lower|reverse|alternating|titlecase|camelcase|snakecase|kebabcase|leet|wordcount|vokal|konsonan|ulangteks|frekuensi|slugify|anagram|syllable|readingtime|smallcaps|upsidedown|zalgo|strikethrough|underline|circledtext|fullwidth|textanalysis|capitalize|trimspaces|countchar|removedupewords|strlen)/.test(n)) return '🔤 Manipulasi Teks';
-        if (/(email|nohp|cc|password|palindrom|palindrome|iban|macvalidate|ipv4|regex|jsonvalidate|isnumeric)/.test(n)) return '✅ Validator & Pemeriksa';
-        if (/(genpassword|uuid|pilih|shuffle|random|coupon|pingenerate|drawcard|hashtag|numbertowords|numeronim|passphrase|acronym)/.test(n)) return '🎲 Generator & Random';
-        if (/(hari|tanggal|date|year|umur|age|weekday|weeknumber|quarter|businessdays|zodiak|timeconvert|ageinseconds|sisahari|daysinmonth)/.test(n)) return '📅 Tanggal & Waktu';
-        if (/(diskon|bill|tip|currency|retirement|bmr|idealweight|waterintake|fueleff|cookingconvert|electricitybill)/.test(n)) return '💸 Keuangan & Kalkulator';
+        if (/(binary|base|hex|morse|rot|caesar|vigenere|atbash|cipher|encode|decode|ascii)/.test(n)) return '🔐 Encoding & Cryptography';
+        if (/(calc|persen|bmi|prima|faktorial|fibonacci|gcd|lcm|average|median|mode|fraction|interest|loan|roi|tax|discount|gpa|roman|area|volume|convert)/.test(n)) return '🔢 Math & Converters';
+        if (/(upper|lower|reverse|alternating|titlecase|camelcase|snakecase|kebabcase|leet|wordcount|vokal|konsonan|ulangteks|frekuensi|slugify|anagram|syllable|readingtime|smallcaps|upsidedown|zalgo|strikethrough|underline|circledtext|fullwidth|textanalysis|capitalize|trimspaces|countchar|removedupewords|strlen)/.test(n)) return '🔤 Text Manipulation';
+        if (/(email|nohp|cc|password|palindrom|palindrome|iban|macvalidate|ipv4|regex|jsonvalidate|isnumeric)/.test(n)) return '✅ Validators & Checkers';
+        if (/(genpassword|uuid|pilih|shuffle|random|coupon|pingenerate|drawcard|hashtag|numbertowords|numeronim|passphrase|acronym)/.test(n)) return '🎲 Generators & Random';
+        if (/(hari|tanggal|date|year|umur|age|weekday|weeknumber|quarter|businessdays|zodiak|timeconvert|ageinseconds|sisahari|daysinmonth)/.test(n)) return '📅 Date & Time Tools';
+        if (/(diskon|bill|tip|currency|retirement|bmr|idealweight|waterintake|fueleff|cookingconvert|electricitybill)/.test(n)) return '💸 Financial Calculators';
         if (/(qrcode|shorturl|url|html|json|extractemails|extracturls)/.test(n)) return '🌐 Web, URL & Data';
-        return '🛠️ Tools Lainnya';
+        return '🛠️ Other Tools';
     }
     if (category === '🖼️ Media') {
-        if (/(sticker|stiker|brat|iqc)/.test(n)) return '🎭 Stiker & Teks';
-        if (/(hd|grayscale|mirror|blur|rotate|sepia|invert|pixelate|brighten|darken|flip|square|watermark)/.test(n)) return '🎨 Efek & Edit Gambar';
-        if (/(speed|slowmo|mutevideo|reversevideo|extractaudio|volumeup)/.test(n)) return '🎬 Edit Video & Audio';
-        if (/(pp|profile|avatar)/.test(n)) return '👤 Profil & Foto';
-        if (/(repost|mediainfo)/.test(n)) return '🔁 Repost & Info Media';
-        return '🖼️ Media Lainnya';
+        if (/(sticker|stiker|brat|iqc)/.test(n)) return '🎭 Stickers & Text';
+        if (/(hd|grayscale|mirror|blur|rotate|sepia|invert|pixelate|brighten|darken|flip|square|watermark)/.test(n)) return '🎨 Image Effects & Edit';
+        if (/(speed|slowmo|mutevideo|reversevideo|extractaudio|volumeup)/.test(n)) return '🎬 Video & Audio Effects';
+        if (/(pp|profile|avatar)/.test(n)) return '👤 Profiles & Photos';
+        if (/(repost|mediainfo)/.test(n)) return '🔁 Repost & Media Info';
+        return '🖼️ Other Media Tools';
     }
     if (category === '🎮 Fun') {
-        if (/(trivia|riddle|tebak|guess|scramble|rps|dice|coin|slot|magic8|tarot)/.test(n)) return '🎲 Mini Game';
-        if (/(jodoh|love|wyr|zodiak|mood|pengagum|rayuan|pernahkah)/.test(n)) return '💕 Sosial & Fun';
-        if (/(quote|fact|pantun|kata|afirmasi|wejangan)/.test(n)) return '💬 Quote & Random';
-        if (/gojo/.test(n)) return '💙 Gojo Special';
-        if (/(roast|compliment|pujian|tantangan|dare|truth)/.test(n)) return '🎭 Interaksi';
-        return '🎮 Fun Lainnya';
+        if (/(trivia|riddle|tebak|guess|scramble|rps|dice|coin|slot|magic8|tarot)/.test(n)) return '🎲 Mini Games';
+        if (/(jodoh|love|wyr|zodiak|mood|pengagum|rayuan|pernahkah)/.test(n)) return '💕 Social & Fun';
+        if (/(quote|fact|pantun|kata|afirmasi|wejangan)/.test(n)) return '💬 Quotes & Fun Facts';
+        if (/gojo/.test(n)) return '⚡ MASTER Specials';
+        if (/(roast|compliment|pujian|tantangan|dare|truth)/.test(n)) return '🎭 Interactive Entertainment';
+        return '🎮 Other Fun Commands';
     }
     if (category === '🤖 Bot') {
         if (/(menu|totalfitur|daftar|version|runtime|ping|whoami)/.test(n)) return 'ℹ️ Info & Status';
-        if (/(self|public|private|autojoin|autoread|autotyping)/.test(n)) return '⚙️ Mode & Otomatisasi';
-        if (/(jadibot|stopbot|listjadibot)/.test(n)) return '🤖 Multi Bot';
-        if (/(stats|system|database|session)/.test(n)) return '📊 Sistem & Statistik';
-        return '🤖 Bot Lainnya';
+        if (/(self|public|private|autojoin|autoread|autotyping)/.test(n)) return '⚙️ Modes & Automation';
+        if (/(jadibot|stopbot|listjadibot)/.test(n)) return '🤖 Sub-Bots & Web Pairing';
+        if (/(stats|system|database|session)/.test(n)) return '📊 System & Statistics';
+        return '🤖 Other Bot Tools';
     }
-    if (category === '🎵 Music') return '🎵 Musik & YouTube';
+    if (category === '🎵 Music') return '🎵 Music & YouTube';
     if (category === '📥 Downloader') {
-        if (/(ig|instagram|tiktok|twitter|facebook|threads|reddit|bilibili|dailymotion|vimeo|snackvideo|pinterest)/.test(n)) return '📱 Sosial Media';
-        if (/(yt|youtube|play)/.test(n)) return '🎵 YouTube & Musik';
-        return '📥 Downloader Lainnya';
+        if (/(ig|instagram|tiktok|twitter|facebook|threads|reddit|bilibili|dailymotion|vimeo|snackvideo|pinterest)/.test(n)) return '📱 Social Media Downloaders';
+        if (/(yt|youtube|play)/.test(n)) return '🎵 YouTube & Music';
+        return '📥 Other Downloaders';
     }
-    if (category === '📢 Broadcast') return '📢 Broadcast';
-    if (category === '🖥️ Panel') return '🖥️ Panel & Server';
-    if (category === '🌀 Gojo') return '💙 Gojo AI & Special';
-    if (category === '🛒 Sewa') return '🛒 Sewa Bot';
-    if (category === '💎 Premium') return '💎 Premium';
-    return '📦 Lainnya';
+    if (category === '📢 Broadcast') return '📢 Broadcast Announcements';
+    if (category === '🖥️ Panel') return '🖥️ Panel & Servers';
+    if (category === '🌀 Gojo') return '⚡ MASTER AI & Specials';
+    if (category === '🛒 Sewa') return '🛒 Bot Rental';
+    if (category === '💎 Premium') return '💎 Premium Access';
+    return '📦 Other Commands';
 }
 
 function getMenuKnowledgeBase() {
     const subcatMap = new Map();
     const descMap = new Map();
     for (const name of getMenuFeatureNames()) {
-        const category = ALIAS_TO_CATEGORY.get(name) || categorizeRegistryName(name) || '📦 Lainnya';
+        const category = ALIAS_TO_CATEGORY.get(name) || categorizeRegistryName(name) || '📦 Other';
         subcatMap.set(name, menuSubcategory(name, category));
         descMap.set(name, getFeatureDescription(name));
     }
@@ -3975,66 +3953,67 @@ function getMenuKnowledgeBase() {
 }
 
 reg(['allmenu'], async (ctx) => {
-    const names = getAllCommandNames().filter(n => !['gamble','lottery','bettinggold'].includes(String(n).toLowerCase()));
+    const names = getAllCommandNames().filter(n => {
+        const lower = String(n).toLowerCase();
+        return !['gamble','lottery','bettinggold'].includes(lower) && !lower.startsWith('rpg');
+    });
     const prefix = settings.prefix || '.';
     const now = Date.now();
 
+    const bannerCaption =
+`╔══════════════════════════════════════╗
+║   ⚡ *${settings.botName} v${settings.botVersion}* ⚡
+║       👑 DEVELOPER: AHSAN
+╚══════════════════════════════════════╝
+
+_${settings.botTagline || '⚡ Next-Gen WhatsApp Multi-Device Powerhouse by AHSAN ⚡'}_
+_"Complete directory of 2,000+ high-performance commands."_
+✦ ⋆ ✧ ⋆ ✦ ⋆ ✧ ⋆ ✦ ⋆ ✧ ⋆ ✦
+
+┏ 🕒 *Time*     : ${fmtTime(now)}
+┃ 📅 *Date*     : ${fmtDate(now)}
+┗ ⚡ *Prefix*   : \`${prefix}\`
+
+┏ 🟢 *Status*   : Online & Active
+┃ 📊 *Total*    : *${names.length}* Commands
+┗ 📚 *Suites*   : *${CATEGORY_ORDER.length}* Categories
+
+┏ 🛡️ Anti-Link     ✅   🛡️ Anti-Spam     ✅
+┃ 🛡️ Anti-Toxic    ✅   🛡️ Anti-Flood    ✅
+┃ 🛡️ Anti-NSFW     ✅   🛡️ Anti-Delete   ✅
+┗ 📖 Auto-Read     ✅   ⏳ Fast Engine   ✅
+
+👑 *Developer:* AHSAN (03107260507)
+📢 *Official Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46
+
+📜 _Full command directory arriving below..._`;
+
+    try {
+        const imageContent = getThumbnailImageContent();
+        await withTimeout(
+            ctx.sock.sendMessage(ctx.jid, { ...imageContent, caption: bannerCaption }, { quoted: ctx.msg }),
+            30_000,
+            'sendMessage(allmenu-banner)'
+        );
+    } catch (e) {
+        await ctx.reply(bannerCaption);
+    }
+
     const grouped = {};
     for (const name of names) {
-        const cat = ALIAS_TO_CATEGORY.get(name) || '📦 Lainnya';
+        const cat = ALIAS_TO_CATEGORY.get(name) || '📦 Other';
         (grouped[cat] ??= []).push(name);
     }
 
-    // ── Header: info lengkap bertema Gojo, gaya bercabang tebal (┏┃┗) ────
-    const header =
-`🥶 *${settings.botName}* ❄️ — Domain Penuh
-_${settings.botTagline || '❄️ Infinity Edition'}_
-_"Ini bukan cuma menu. Ini Unlimited Void — semua jurus, terlihat jelas."_
-❅ ⋆ ❆ ⋆ ❅ ⋆ ❆ ⋆ ❅ ⋆ ❆ ⋆ ❅
-
-┏ 🕐 ${sc('Waktu')}    : ${fmtTime(now)} WIB
-┃ 📅 ${sc('Tanggal')}  : ${fmtDate(now)}
-┗ ⚡ ${sc('Prefix')}   : \`${prefix}\`
-
-┏ 🌀 ${sc('Status')}   : 🟢 Online & Siap
-┃ 📊 ${sc('Total')}    : *${names.length}* command
-┗ 📚 ${sc('Kategori')} : *${CATEGORY_ORDER.length}* menu
-
-┏ 🛡️ Anti-GB        ✅   🛡️ Anti-Link      ✅
-┃ 🛡️ Anti-Shortlink ✅   🛡️ Anti-Spam      ✅
-┃ 🛡️ Anti-Toxic     ✅   🛡️ Anti-Flood     ✅
-┗ 📖 Auto-Read      ✅   ⏳ Cooldown       ✅
-
-『 領域展開 — Semua Jurus Terungkap 』`;
-
-    const sections = [header];
-
-    // Setiap kategori ditampilkan dalam kotak bergaya: ╭─〔 emoji NAMA 〕─╮
-    // diikuti ┣➤ command, ditutup ┗━━━. Untuk kategori yang isinya BANYAK
-    // (RPG, Tools, dst — bisa 200+ command), list dipecah lagi per HURUF
-    // AWAL (— A —, — B —, dst, seperti daftar kontak HP) supaya tidak jadi
-    // satu tembok teks panjang yang malesin dibaca — orang bisa langsung
-    // loncat ke huruf yang dia cari.
-    const SPLIT_THRESHOLD = 20; // di atas ini, baru dipecah per huruf
-    // FIX 2026-07-24: dulu cuma kategori Admin yang dikelompokkan per fungsi
-    // + dikasih deskripsi; kategori lain cuma nama polos + split alfabet.
-    // menuKB "membaca" sendRpgMenu/sendAdminMenu/sendFunMenu/sendToolsMenu/
-    // sendMediaMenu/sendBotMenu (lihat getMenuKnowledgeBase() di atas) supaya
-    // gaya yang sama (kelompok per fungsi + deskripsi singkat) sekarang
-    // dipakai di SEMUA kategori, bukan cuma Admin.
+    const sections = [];
     const menuKB = await getMenuKnowledgeBase();
 
-    // All Menu dibuat padat agar seluruh kategori/subkategori tetap muat
-    // dalam SATU pesan. Deskripsi detail tetap tersedia di menu kategori
-    // (.menuadmin/.menurpg/.menutools/.menumedia/.menufun).
     const fmt = n => {
         const tag = roleTag(n);
         return `┣➤ ${prefix}${n}${tag ? ' ' + tag : ''}`;
     };
-    // Gaya LAMA (alfabet kalau banyak, plain list kalau sedikit) — dipakai
-    // sebagai fallback tiap kali sebuah command TIDAK ketemu di menuKB (belum
-    // sempat ditulis di menu.js), supaya command itu tetap AMAN muncul,
-    // cuma tanpa sub-grup/deskripsi. Command tidak pernah hilang dari daftar.
+
+    const SPLIT_THRESHOLD = 20;
     const renderFallback = fallbackList => {
         if (fallbackList.length > SPLIT_THRESHOLD) {
             const sorted = [...fallbackList].sort();
@@ -4055,26 +4034,15 @@ _"Ini bukan cuma menu. Ini Unlimited Void — semua jurus, terlihat jelas."_
         const list = grouped[cat];
         if (!list || list.length === 0) continue;
 
-        // FIX: kategori Panel (.cpanel) SENGAJA tidak di-list satu-satu
-        // di sini — 151 command (create server × 11 tier RAM × 5 versi,
-        // role × 3 aksi × 5 versi, dst) bikin .allmenu jadi kepanjangan
-        // buat dibaca. Kategori ini sudah punya menu detail sendiri
-        // (.cpanel), jadi cukup ringkasan + pointer ke situ.
         if (cat === '🖥️ Panel') {
             sections.push(
-`╭─〔 *${sc(cat)}* 〕─╮ _(${list.length})_\n┣➤ ${prefix}cpanel — buka menu lengkap (create/kelola server, role, dst)\n┗━━━━━━━━━━━━━━━━⊱`
+`╭─〔 *${sc(cat)}* 〕─╮ _(${list.length})_\n┣➤ ${prefix}cpanel — Open complete cPanel dashboard (create servers, manage RAM & roles)\n┗━━━━━━━━━━━━━━━━⊱`
             );
             continue;
         }
 
         let body;
         if (cat === '🛡️ Admin') {
-            // Admin sudah punya pengelompokan manual per fungsi (lihat
-            // ADMIN_SUBCATEGORY_GROUPS) — dipertahankan apa adanya karena
-            // sudah lebih lengkap dari hasil "baca otomatis" (mencakup
-            // command yang belum sempat ditulis di sendAdminMenu, mis.
-            // sub-sistem Anti-NSFW). Yang baru: tiap baris SEKARANG ikut
-            // dikasih deskripsi juga (dari menuKB, hasil baca sendAdminMenu).
             const bySubcat = {};
             for (const name of list) {
                 const sub = adminSubcategory(name);
@@ -4088,11 +4056,6 @@ _"Ini bukan cuma menu. Ini Unlimited Void — semua jurus, terlihat jelas."_
                 })
                 .join('\n┃\n');
         } else {
-            // Kategori LAIN (RPG, Fun, Tools, Media, Musik & Download, Bot,
-            // dst) — dikelompokkan per fungsi pakai menuKB.subcatMap, dengan
-            // urutan sub-kategori mengikuti urutan kemunculan aslinya di
-            // menu.js. Command yang tidak ketemu di menuKB dikumpulkan &
-            // dirender lewat renderFallback() (gaya lama), bukan dibuang.
             const bySubcat = {};
             const subcatOrder = [];
             const unclassified = [];
@@ -4103,9 +4066,6 @@ _"Ini bukan cuma menu. Ini Unlimited Void — semua jurus, terlihat jelas."_
                 bySubcat[sub].push(name);
             }
             if (subcatOrder.length === 0) {
-                // Tidak ada satupun command di kategori ini yang berhasil
-                // dipetakan (mis. kategori tanpa menu detail sendiri) —
-                // pakai gaya lama seutuhnya, sama seperti sebelum FIX ini.
                 body = renderFallback(list);
             } else {
                 const subSections = subcatOrder.map(sub => {
@@ -4113,7 +4073,7 @@ _"Ini bukan cuma menu. Ini Unlimited Void — semua jurus, terlihat jelas."_
                     return `┃ ▸ ${sub}\n${lines.join('\n')}`;
                 });
                 if (unclassified.length) {
-                    subSections.push(`┃ ▸ *${sc('Lainnya')}*\n${renderFallback(unclassified)}`);
+                    subSections.push(`┃ ▸ *${sc('Other Commands')}*\n${renderFallback(unclassified)}`);
                 }
                 body = subSections.join('\n┃\n');
             }
@@ -4124,12 +4084,10 @@ _"Ini bukan cuma menu. Ini Unlimited Void — semua jurus, terlihat jelas."_
         );
     }
 
-    sections.push(`\n— ✦☆✦ — *${sc('KETERANGAN')}*\n🌟 = CREATOR  |  Ⓞ = OWNER  |  Ⓐ = ADMIN  |  Ⓟ = PREMIUM\n_Tanpa simbol = bisa dipakai semua user (free)_\n\n💡 Ketik *${prefix}menu* untuk tampilan ringkas.\n「 _Infinity has no limit — and neither does this list._ 」`);
+    sections.push(`\n— ✦☆✦ — *${sc('ROLES & PERMISSIONS')}*\n🌟 = CREATOR  |  Ⓞ = OWNER  |  Ⓐ = ADMIN  |  Ⓟ = PREMIUM\n_No symbol = Public command (free for all members)_\n\n💡 Type *${prefix}menu* for the compact interactive dashboard.\n👑 *© 2026 MASTER MD • All Rights Reserved to AHSAN (03107260507)*`);
 
-    const text = safeReplyText(sections.join('\n\n'));
-    // All Menu wajib satu pesan teks. Gambar/caption dipakai untuk .menu,
-    // sedangkan .allmenu langsung teks agar tidak berubah menjadi dua pesan.
-    await replyWithThumb(ctx.sock, ctx.jid, text, ctx.msg);
+    const directoryText = safeReplyText(sections.join('\n\n'));
+    await ctx.sock.sendMessage(ctx.jid, { text: directoryText }, { quoted: ctx.msg });
 });
 
 
@@ -5587,36 +5545,36 @@ const CATEGORY_ORDER = [
 ];
 
 const ADMIN_SUBCATEGORY_ORDER = [
-    '👥 Manajemen Member', '📥 Approval & Join Request',
-    '👑 Jabatan & Hak Akses', '⚠️ Warning & Moderasi',
-    '🔒 Lock Konten', '🔇 Mute & Lock', '🛡️ Proteksi',
-    '🔗 Link, Kata & Whitelist', '⚙️ Pengaturan Grup',
-    '👋 Welcome & Farewell', '📊 Poll & Jadwal', '🎉 Event & Tugas',
-    '📝 Pengumuman, Catatan & Template', '🧾 Audit & Laporan',
-    '📈 Monitoring & Statistik', '💾 Backup & Restore',
-    '📋 Dashboard Grup', '📦 Admin Lainnya', '📦 Lainnya'
+    '👥 Member Management', '📥 Join Requests & Approvals',
+    '👑 Roles & Access Control', '⚠️ Warnings & Moderation',
+    '🔒 Content Lock & Security', '🔇 Group Mute & Silence', '🛡️ Protection & Anti-Spam',
+    '🔗 Links, Filters & Whitelist', '⚙️ Group Settings & Rules',
+    '👋 Welcome & Farewell', '📊 Polls & Automated Schedules', '🎉 Events & Group Tasks',
+    '📝 Announcements, Notes & Templates', '🧾 Audit Logs & Reports',
+    '📈 Group Monitoring & Stats', '💾 Backup & Recovery',
+    '📋 Group Dashboard & Overview', '📦 Other Admin Tools'
 ];
 
 function adminSubcategory(name) {
     const n = String(name).toLowerCase();
-    if (/(approve|reject|request|terima|tolak)/.test(n)) return '📥 Approval & Join Request';
-    if (/(kick|promote|demote|add|remove|member|mutemember|unmutemember|listadmin|admincount|bulk)/.test(n)) return '👥 Manajemen Member';
-    if (/(owner|creator|premium|role|jabatan|access|permission)/.test(n)) return '👑 Jabatan & Hak Akses';
-    if (/(warn|warning|strike)/.test(n)) return '⚠️ Warning & Moderasi';
-    if (/(lockimage|lockvideo|lockdocument|lockcontact|locklocation|lockvn|lockaudio|lockgif|lockpoll|locktext|locksticker|lockmedia)/.test(n)) return '🔒 Lock Konten';
-    if (/(mute|lockgroup|unlockgroup|slowmode|closegroup|opengroup)/.test(n)) return '🔇 Mute & Lock';
-    if (/(anti|protect|secure|phishing|nsfw|spam|toxic|virtex|judol|pinjol|caps|flood)/.test(n)) return '🛡️ Proteksi';
-    if (/(badword|allowlink|whitelist|antilink|link|revoke)/.test(n)) return '🔗 Link, Kata & Whitelist';
+    if (/(approve|reject|request|terima|tolak)/.test(n)) return '📥 Join Requests & Approvals';
+    if (/(kick|promote|demote|add|remove|member|mutemember|unmutemember|listadmin|admincount|bulk)/.test(n)) return '👥 Member Management';
+    if (/(owner|creator|premium|role|jabatan|access|permission)/.test(n)) return '👑 Roles & Access Control';
+    if (/(warn|warning|strike)/.test(n)) return '⚠️ Warnings & Moderation';
+    if (/(lockimage|lockvideo|lockdocument|lockcontact|locklocation|lockvn|lockaudio|lockgif|lockpoll|locktext|locksticker|lockmedia)/.test(n)) return '🔒 Content Lock & Security';
+    if (/(mute|lockgroup|unlockgroup|slowmode|closegroup|opengroup)/.test(n)) return '🔇 Group Mute & Silence';
+    if (/(anti|protect|secure|phishing|nsfw|spam|toxic|virtex|judol|pinjol|caps|flood)/.test(n)) return '🛡️ Protection & Anti-Spam';
+    if (/(badword|allowlink|whitelist|antilink|link|revoke)/.test(n)) return '🔗 Links, Filters & Whitelist';
     if (/(welcome|farewell)/.test(n)) return '👋 Welcome & Farewell';
-    if (/(poll|vote|jadwal|schedule)/.test(n)) return '📊 Poll & Jadwal';
-    if (/(event|rsvp|birthday|task|quicklock|quickunlock)/.test(n)) return '🎉 Event & Tugas';
-    if (/(announcement|pengumuman|membernote|template|catatan|note|motd|autoreply)/.test(n)) return '📝 Pengumuman, Catatan & Template';
-    if (/(audit|report|lapor|laporan)/.test(n)) return '🧾 Audit & Laporan';
-    if (/(monitor|activity|aktivitas)/.test(n)) return '📈 Monitoring & Statistik';
-    if (/(backup|restore)/.test(n)) return '💾 Backup & Restore';
-    if (/(summary|stats|statistik|groupage|creator|exportmember|cekbot)/.test(n)) return '📋 Dashboard Grup';
-    if (/(groupinfo|setname|setdesc|group|icon|ephemeral|rules|setting)/.test(n)) return '⚙️ Pengaturan Grup';
-    return '📦 Admin Lainnya';
+    if (/(poll|vote|jadwal|schedule)/.test(n)) return '📊 Polls & Automated Schedules';
+    if (/(event|rsvp|birthday|task|quicklock|quickunlock)/.test(n)) return '🎉 Events & Group Tasks';
+    if (/(announcement|pengumuman|membernote|template|catatan|note|motd|autoreply)/.test(n)) return '📝 Announcements, Notes & Templates';
+    if (/(audit|report|lapor|laporan)/.test(n)) return '🧾 Audit Logs & Reports';
+    if (/(monitor|activity|aktivitas)/.test(n)) return '📈 Group Monitoring & Stats';
+    if (/(backup|restore)/.test(n)) return '💾 Backup & Recovery';
+    if (/(summary|stats|statistik|groupage|creator|exportmember|cekbot)/.test(n)) return '📋 Group Dashboard & Overview';
+    if (/(groupinfo|setname|setdesc|group|icon|ephemeral|rules|setting)/.test(n)) return '⚙️ Group Settings & Rules';
+    return '📦 Other Admin Tools';
 }
 
 

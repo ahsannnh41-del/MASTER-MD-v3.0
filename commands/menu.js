@@ -563,23 +563,23 @@ function registrySubcategory(name, category) {
     const n = String(name || '').toLowerCase();
 
     if (category === '🛡️ Admin') {
-        if (/(approve|reject|request|terima|tolak)/.test(n)) return '📥 Approval & Join Request';
-        if (/(kick|promote|demote|add|remove|member|mutemember|unmutemember|listadmin|admincount|bulk)/.test(n)) return '👥 Manajemen Member';
-        if (/(owner|creator|premium|role|jabatan|permission|access)/.test(n)) return '👑 Jabatan & Hak Akses';
-        if (/(warn|warning|strike)/.test(n)) return '⚠️ Warning & Moderasi';
-        if (/(lockimage|lockvideo|lockdocument|lockcontact|locklocation|lockvn|lockaudio|lockgif|lockpoll|locktext|locksticker|lockmedia)/.test(n)) return '🔒 Lock Konten';
-        if (/(anti|protect|secure|phishing|nsfw|spam|toxic|virtex|judol|pinjol|caps|flood)/.test(n)) return '🛡️ Proteksi';
-        if (/(badword|allowlink|whitelist|antilink|link|revoke)/.test(n)) return '🔗 Link, Kata & Whitelist';
+        if (/(approve|reject|request|terima|tolak)/.test(n)) return '📥 Join Requests & Approvals';
+        if (/(kick|promote|demote|add|remove|member|mutemember|unmutemember|listadmin|admincount|bulk)/.test(n)) return '👥 Member Management';
+        if (/(owner|creator|premium|role|jabatan|permission|access)/.test(n)) return '👑 Roles & Access Control';
+        if (/(warn|warning|strike)/.test(n)) return '⚠️ Warnings & Moderation';
+        if (/(lockimage|lockvideo|lockdocument|lockcontact|locklocation|lockvn|lockaudio|lockgif|lockpoll|locktext|locksticker|lockmedia)/.test(n)) return '🔒 Content Lock & Security';
+        if (/(anti|protect|secure|phishing|nsfw|spam|toxic|virtex|judol|pinjol|caps|flood)/.test(n)) return '🛡️ Protection & Anti-Spam';
+        if (/(badword|allowlink|whitelist|antilink|link|revoke)/.test(n)) return '🔗 Links, Filters & Whitelist';
         if (/(welcome|farewell)/.test(n)) return '👋 Welcome & Farewell';
-        if (/(poll|vote|jadwal|schedule)/.test(n)) return '📊 Poll & Jadwal';
-        if (/(event|rsvp|birthday|task|quicklock|quickunlock)/.test(n)) return '🎉 Event & Tugas';
-        if (/(announcement|pengumuman|membernote|template|catatan|note|motd|autoreply)/.test(n)) return '📝 Pengumuman, Catatan & Template';
-        if (/(audit|report|lapor|laporan)/.test(n)) return '🧾 Audit & Laporan';
-        if (/(monitor|activity|aktivitas|stats|statistik)/.test(n)) return '📈 Monitoring & Statistik';
-        if (/(backup|restore)/.test(n)) return '💾 Backup & Restore';
-        if (/(group|open|close|setname|setdesc|icon|ephemeral|rules|setting)/.test(n)) return '⚙️ Pengaturan Grup';
-        if (/(summary|groupage|exportmember|cekbot)/.test(n)) return '📋 Dashboard Grup';
-        return '📦 Admin Lainnya';
+        if (/(poll|vote|jadwal|schedule)/.test(n)) return '📊 Polls & Automated Schedules';
+        if (/(event|rsvp|birthday|task|quicklock|quickunlock)/.test(n)) return '🎉 Events & Group Tasks';
+        if (/(announcement|pengumuman|membernote|template|catatan|note|motd|autoreply)/.test(n)) return '📝 Announcements, Notes & Templates';
+        if (/(audit|report|lapor|laporan)/.test(n)) return '🧾 Audit Logs & Reports';
+        if (/(monitor|activity|aktivitas|stats|statistik)/.test(n)) return '📈 Group Monitoring & Stats';
+        if (/(backup|restore)/.test(n)) return '💾 Backup & Recovery';
+        if (/(group|open|close|setname|setdesc|icon|ephemeral|rules|setting)/.test(n)) return '⚙️ Group Settings & Rules';
+        if (/(summary|groupage|exportmember|cekbot)/.test(n)) return '📋 Group Dashboard & Overview';
+        return '📦 Other Admin Tools';
     }
 
     if (category === '🛠️ Tools') {
@@ -661,39 +661,20 @@ function buildRegistryCategoryPack(category, label = category) {
     return `\n${blocks}`;
 }
 
-// ─── MENU UTAMA (RINGKAS) ─────────────────────────────────────────
-// Sengaja dibuat singkat — info lengkap (proteksi aktif & daftar semua
-// command) dipindahkan ke .allmenu, supaya .menu cepat dibaca sekilas.
-// Struktur info (Nama/Status/Uptime/Respon/Versi/Mode/Prefix) terinspirasi
-// dari format menu bot lain yang dicontohkan user, disesuaikan ke identitas
-// GOJO SATORU MD V2.
-// FIX (rebranding V2): tambah sapaan + perkenalan singkat di baris paling
-// awal menuText (sebelum box header) sesuai permintaan user — dirender di
-// KEDUA jalur (interactive button & fallback text) karena keduanya pakai
-// variabel menuText yang sama, jadi cukup diubah di satu tempat ini.
+// ─── MAIN MENU (CLEAN ENGLISH SINGLE-CARD DASHBOARD) ─────────────
 export async function sendMainMenu(reply, sender, sock, jid, msg, opts = {}) {
     const now     = Date.now();
-    const { isOwner = false, isPremium = false, pushName = null, botStartTime = now, totalFeatures = 0, featureList = [] } = opts;
+    const { isOwner = false, isPremium = false, pushName = null, botStartTime = now, totalFeatures = 0 } = opts;
 
-    let latensi = 0;
     if (sock && jid) {
-        const t0 = Date.now();
-        try { await sock.sendPresenceUpdate('composing', jid); } catch { /* abaikan */ }
-        latensi = Date.now() - t0;
+        try { await sock.sendPresenceUpdate('composing', jid); } catch { /* ignore */ }
     }
 
     const statusLabel = isOwner ? 'Owner 👑' : isPremium ? 'Premium 💎' : 'Free 🌿';
-    const namaTampil  = pushName || (sender ? sender.split('@')[0] : 'Kakak');
-
-    // Data tambahan buat header premium (v3.2.2) — semuanya baca dari
-    // variabel/API yang sudah ada (settings, process bawaan Node.js),
-    // tidak ada state/logic baru yang ditambahkan.
+    const namaTampil  = pushName || (sender ? sender.split('@')[0] : 'User');
     const mode        = settings.public !== false ? 'Public' : 'Private';
     const nodeVersion = process.version;
     const ramUsageMb  = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
-
-    const userLines =
-`┃ ⟤ ⚡ ${sc('Features')}  : 2000+ Commands Active\n┃ ⟤ 🚀 ${sc('Speed')}     : Lightning Fast Engine\n┃ ⟤ 🛡️ ${sc('Security')}  : Multi-Layer Anti-Spam & Protection`;
 
     const menuText =
 `👋 Assalam-o-Alaikum, *${namaTampil}*! Welcome to *${BOT}* ⚡ — developed by *AHSAN*.
@@ -710,218 +691,57 @@ _${TAG}_
 
 ┏ 💾 ${sc('RAM')}      : ${ramUsageMb} MB
 ┃ ⏰ ${sc('Runtime')}  : ${fmtDuration(now - botStartTime)}
-┃ 📊 ${sc('Features')} : ${totalFeatures} Active
-┗ 🔖 ${sc('Prefix')}   : ${P}
+┃ 📊 ${sc('Features')} : ${totalFeatures || '2000+'} Active
+┗ 🔖 ${sc('Prefix')}   : \`${P}\`
 
 ${sc('Fast')} • ${sc('Stable')} • ${sc('Secure')}
 ⚡ ${sc('DEVELOPED BY')} : AHSAN
 🌐 ${settings.channelName || 'MASTER MD Official'}
 
-${userLines}
+╭─〔 📋 ${sc('Command Suites')} 〕
+│ ❍ \`${P}allmenu\`   — View all 2,000+ active commands
+│ ❍ \`${P}menuadmin\` — Group admin & moderation tools
+│ ❍ \`${P}menumedia\` — Media downloaders & video tools
+│ ❍ \`${P}menutools\` — Utility tools & converters
+│ ❍ \`${P}menufun\`   — Games, trivia & interactive fun
+│ ❍ \`${P}ai\`        — Smart AI chatbot & prompts
+│ ❍ \`${P}ping\`      — Check latency & server status
+│ ❍ \`${P}pair\`      — Web pairing code generator
+│ ❍ \`${P}owner\`     — Developer contact & info
+╰──────────────────────────────
+👑 *Developer:* AHSAN (03107260507)
+📢 *Official Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46
 
-╭─〔 📋 ${sc('Quick Navigation')} 〕
-│ ❍ *1* — 🤖 All Commands (${P}allmenu)
-│ ❍ *2* — 👑 Developer Info (${P}owner)
-│ ❍ *3* — 🔑 Web Pairing (${P}pair)
-│ ❍ *4* — 📢 Channel Link (${P}credits)
-│ ❍ *5* — 🛡️ Admin Menu (${P}menuadmin)
-│ ❍ *6* — 🧠 AI Supercharged (${P}ai)
-│ ❍ *7* — 📥 Media & Download (${P}menumedia)
-│ ❍ *8* — 🛠️ Tools & Utils (${P}menutools)
-│ ❍ *9* — ⚡ Ping & Speed (${P}ping)
-╰────────────
-_Use buttons below or type any command!_`;
-
-    const RPG_IGNORE = new Set([
-        'rpg','menurpg','profil','class','inventory','equip','unequip','use','istirahat','statdetail',
-        'hunt','lawan','boss','dungeon','bossinfo','dungeoninfo','toko','beli','jual','daily','kerja',
-        'joblist','nabung','tarik','transfer','rob','gacha','expedition','klaimekspedisi','petshop',
-        'buypet','petinfo','setpet','quest','questclaim','achievement','ranking','leaderboard','marry',
-        'divorce','mine','fish','craft','refine','train','prestige','guildcreate','guildjoin','guildleave',
-        'guildinfo','guildmembers','guildlist','guilddonate','guildupgrade','guildpromote','guildkick',
-        'guilddisband','plant','water','harvest','farmstatus','cook','recipes','titles','equiptitle','bounty','claimbounty'
-    ]);
-
-    const featureCounts = {};
-    for (const name of featureList) {
-        const n = String(name).toLowerCase();
-        if (RPG_IGNORE.has(n) || n.startsWith('rpg')) continue;
-        const cat =
-            n.startsWith('admin') ? '🛡️ Admin & Moderation' :
-            n.startsWith('fun') ? '🎮 Fun & Games' :
-            n.startsWith('tool') ? '🛠️ Tools & Utilities' :
-            n.startsWith('media') ? '🖼️ Media & Editing' :
-            n.startsWith('social') || ['ytmp3','ytmp4','tiktok','ig','play','fb'].includes(n) ? '📥 Downloaders' :
-            n.startsWith('bot') || ['ping','alive','runtime','speed','owner'].includes(n) ? '🤖 Bot & System' :
-            n.startsWith('ai') ? '🧠 AI Supercharged' : '📦 Miscellaneous';
-        featureCounts[cat] = (featureCounts[cat] || 0) + 1;
-    }
-    const featureSummary = Object.entries(featureCounts)
-        .map(([cat, count]) => `│ ❍ ${cat} : *${count} features*`)
-        .join('\n');
-
-    const completeMenuText = menuText + `
-
-╭─〔 📚 ${sc('Feature Pack')} 〕
-${featureSummary}
-│
-│ ${P}allmenu — View all 2,000+ active commands
-│ ${P}menuadmin — Admin & Moderation tools
-│ ${P}menutools — Utility tools & converters
-│ ${P}menumedia — Media downloaders & video tools
-│ ${P}ai — AI assistant & image generation
-╰────────────`;
-    // FIX (percobaan ke-12 — dikonfirmasi lewat dokumentasi Baileys +
-    // laporan bug serupa persis di GitHub resminya: "sendMessage() akan
-    // mengambil daftar participant grup dulu untuk enkripsi ke tiap
-    // anggota" sebelum benar-benar mengirim; relayMessage() dipanggil
-    // langsung TIDAK melakukan ini otomatis). Percobaan ke-11 (ganti ke
-    // shape { text, buttons, footer } yang "dikenal" sock.sendMessage())
-    // memang jadi bisa terkirim & KEBUKTI didekripsi normal — TAPI
-    // nativeFlowInfo custom di button ke-2 hilang di tengah jalan (proses
-    // konstruksi internal Baileys utk shape ini kemungkinan cuma menyalin
-    // field yang dikenalnya per button, bukan copy-paste objek apa
-    // adanya) — makanya tombol interaktifnya tidak muncul lagi.
-    // Sekarang: BALIK ke struktur proto mentah (generateWAMessageFromContent
-    // + relayMessage) yang SUDAH TERBUKTI render tombol interaktif dengan
-    // benar sejak awal — tapi sebelum relayMessage dipanggil, metadata
-    // grup di-pastikan fresh dulu lewat getGroupMetadata() (helper yang
-    // SUDAH ADA di lib/groupMetaCache.js, dipakai index.js juga) — supaya
-    // bagian yang selama ini hilang dari jalur relayMessage manual
-    // (daftar participant utk enkripsi) sudah tersedia SEBELUM pesan
-    // benar-benar dikirim.
-    // Header gambar DISAMBUNG LAGI di sini (headerType:4 + upload fresh
-    // tiap kali, dibungkus timeout) — percobaan ke-6 s/d ke-9 yang dulu
-    // gagal SEMUANYA lewat jalur relayMessage yang SAMA-SAMA belum punya
-    // fix getGroupMetadata ini, jadi ada kemungkinan besar kegagalannya
-    // bukan soal teknik headernya, tapi ikut kena masalah dekripsi yang
-    // sama dengan tombolnya. Upload gagal/lambat → fallback headerType:1
-    // (tombol tetap terkirim tanpa gambar) alih-alih gagal total.
-    if (sock && jid) {
-        try {
-            const { generateWAMessageFromContent, prepareWAMessageMedia, proto } = await import('@whiskeysockets/baileys');
-
-            if (jid.endsWith('@g.us')) {
-                try {
-                    await withTimeout(getGroupMetadata(sock, jid), 15_000, 'getGroupMetadata(menu)');
-                } catch (metaErr) {
-                    log?.warn?.(`[menu] refresh metadata grup: ${metaErr.message}`);
-                }
-            }
-
-            let headerImageMessage = null;
-            try {
-                const media = await withTimeout(
-                    prepareWAMessageMedia(
-                        getThumbnailImageContent(),
-                        { upload: sock.waUploadToServer }
-                    ),
-                    15_000,
-                    'prepareWAMessageMedia(menuThumbnail)'
-                );
-                headerImageMessage = media.imageMessage;
-            } catch (thumbErr) {
-                log?.warn?.(`[menu] upload thumbnail header: ${thumbErr.message}`);
-            }
-
-            const rows = [
-                { title: '🤖 All Commands',     description: 'View all 2000+ available commands', id: `${P}allmenu`     },
-                { title: '👑 Developer Info',    description: 'AHSAN contact & official details',  id: `${P}owner`       },
-                { title: '🔑 Web Pairing',       description: 'Pair new device or Jadibot',        id: `${P}pair`        },
-                { title: '📢 Official Channel',  description: 'Join official WhatsApp channel',    id: `${P}credits`     },
-                { title: '⚡ Ping & Speed',      description: 'Check bot server response speed',   id: `${P}ping`        },
-                { title: '👮 Admin Menu',        description: 'Group moderation & security tools', id: `${P}menuadmin`   },
-                { title: '🧠 AI Supercharged',   description: 'Smart AI assistant & image tools',  id: `${P}ai`          },
-                { title: '🛠 Tools Menu',        description: 'Converters, generators & tools',    id: `${P}menutools`   },
-                { title: '📥 Downloader Menu',   description: 'TikTok, Instagram, YouTube & more', id: `${P}menumedia`   },
-                { title: '🎮 Fun & Games',       description: 'Fun commands, memes & trivia',      id: `${P}menufun`     },
-                { title: '📢 Broadcast & News',  description: 'Group announcements and broadcasts',id: `${P}bc`          },
-                { title: '🤖 Bot Settings',      description: 'Bot configuration & options',       id: `${P}menubot`     },
-            ];
-
-            const interactiveMessage = proto.Message.InteractiveMessage.create({
-                body: proto.Message.InteractiveMessage.Body.create({
-                    text: `${completeMenuText}\n\n👇 *Use interactive buttons or type commands:*`
-                }),
-                footer: proto.Message.InteractiveMessage.Footer.create({
-                    text: `© ${BOT} • Developed by AHSAN`
-                }),
-                header: headerImageMessage ? proto.Message.InteractiveMessage.Header.create({
-                    hasMediaAttachment: true,
-                    imageMessage: headerImageMessage
-                }) : proto.Message.InteractiveMessage.Header.create({ hasMediaAttachment: false }),
-                nativeFlowMessage: proto.Message.InteractiveMessage.NativeFlowMessage.create({
-                    buttons: [
-                        {
-                            name: 'quick_reply',
-                            buttonParamsJson: JSON.stringify({
-                                display_text: '🤖 All Commands (2000+)',
-                                id: `${P}allmenu`
-                            })
-                        },
-                        {
-                            name: 'cta_url',
-                            buttonParamsJson: JSON.stringify({
-                                display_text: '📢 Official Channel',
-                                url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46'
-                            })
-                        },
-                        {
-                            name: 'single_select',
-                            buttonParamsJson: JSON.stringify({
-                                title: `${BOT} Menu`,
-                                sections: [
-                                    { title: 'Quick Actions', rows: rows.slice(0, 4) },
-                                    { title: 'Features & AI', rows: rows.slice(4, 8) },
-                                    { title: 'Tools & RPG', rows: rows.slice(8, 12) },
-                                ]
-                            })
-                        }
-                    ]
-                })
-            });
-
-            const waMsg = generateWAMessageFromContent(jid, {
-                viewOnceMessage: {
-                    message: {
-                        interactiveMessage
-                    }
-                }
-            }, { quoted: msg, userJid: sock.user?.id });
-
-            await sock.relayMessage(jid, waMsg.message, { messageId: waMsg.key.id });
-            markMenuPending(sender);
-            return;
-        } catch (err) {
-            log?.warn?.(`[menu] tombol interaktif gagal, fallback ke teks+gambar: ${err.message}`);
-        }
-    }
+💡 _Reply with 1-9 to open any menu immediately!_`;
 
     markMenuPending(sender);
-    await sendMenuReply(sock, jid, msg, settings.thumbnailUrl, completeMenuText);
+
+    if (sock && jid) {
+        try {
+            const imageContent = getThumbnailImageContent();
+            await withTimeout(
+                sock.sendMessage(jid, { ...imageContent, caption: menuText }, { quoted: msg }),
+                30_000,
+                'sendMessage(menuImage)'
+            );
+            return;
+        } catch (err) {
+            log?.warn?.(`[menu] Failed to send thumbnail image: ${err.message}`);
+        }
+    }
+    await reply(menuText);
 }
 
-// Versi ringkas dari replyWithImage() (commands/index.js) — sengaja
-// diduplikasi kecil di sini, BUKAN di-import dari commands/index.js,
-// supaya tidak bikin circular import (commands/index.js yang import
-// sendMainMenu dari file ini). Perilakunya sama: kirim gambar dengan
-// caption pendek kalau teksnya kepanjangan buat caption, teks lengkapnya
-// nyusul sebagai pesan terpisah; fallback ke teks polos total kalau
-// kirim gambar gagal.
 const SAFE_CAPTION_LIMIT = 1000;
 async function sendMenuReply(sock, jid, quotedMsg, imageUrl, text) {
     const full = safeReplyText(text);
     const tooLongForCaption = full.length > SAFE_CAPTION_LIMIT;
     const caption = tooLongForCaption
-        ? `${truncate(full, SAFE_CAPTION_LIMIT)}\n\n👇 _Lanjutan di pesan berikutnya..._`
+        ? `${truncate(full, SAFE_CAPTION_LIMIT)}\n\n👇 _Full details arriving in next message..._`
         : full;
 
     if (imageUrl) {
         try {
-            // FIX (2026-08-06): pakai file lokal media/thumbnail.* kalau ada
-            // — lihat lib/thumbnailSource.js. imageUrl tetap jadi penentu mau
-            // kirim gambar atau tidak; isinya diganti ke sumber lokal kalau
-            // persis settings.thumbnailUrl.
             const imageContent = imageUrl === settings.thumbnailUrl
                 ? getThumbnailImageContent()
                 : { image: { url: imageUrl } };
@@ -935,14 +755,13 @@ async function sendMenuReply(sock, jid, quotedMsg, imageUrl, text) {
             }
             return;
         } catch (err) {
-            log?.warn?.(`[menu] gagal kirim gambar thumbnail: ${err.message}`);
-            // lanjut ke fallback teks biasa di bawah
+            log?.warn?.(`[menu] Failed to send thumbnail image: ${err.message}`);
         }
     }
     try {
         await sock.sendMessage(jid, { text: full }, { quoted: quotedMsg });
     } catch (err) {
-        log?.error?.(`[menu] gagal kirim teks fallback: ${err.message}`);
+        log?.error?.(`[menu] Failed to send fallback text: ${err.message}`);
     }
 }
 
