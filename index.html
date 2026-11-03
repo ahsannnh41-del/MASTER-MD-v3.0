@@ -1141,8 +1141,29 @@
                         </div>
                         <div class="title-text">
                             <h2>Pair Your Device</h2>
-                            <p>Enter your WhatsApp phone number to generate your instant 8-digit link code.</p>
+                            <p>Choose Pairing Code or Scan QR Code to connect your WhatsApp instantly.</p>
                         </div>
+                    </div>
+
+                    <!-- Top Mode Switcher: Code vs QR -->
+                    <div style="display: flex; gap: 10px; margin-bottom: 18px; justify-content: center;">
+                        <button type="button" id="mainTabCode" style="flex: 1; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--cyan-neon); background: rgba(0, 242, 254, 0.16); color: #fff; font-size: 13px; cursor: pointer; font-weight: 700; transition: all 0.25s ease;">🔢 8-Digit Pairing Code</button>
+                        <button type="button" id="mainTabQr" style="flex: 1; padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.15); background: rgba(255, 255, 255, 0.05); color: var(--text-muted); font-size: 13px; cursor: pointer; font-weight: 700; transition: all 0.25s ease;">📷 Instant QR Code</button>
+                    </div>
+
+                    <!-- Direct QR Scan Panel (When mainTabQr is selected) -->
+                    <div id="directQrPanel" style="display: none; flex-direction: column; align-items: center; justify-content: center; padding: 22px; background: rgba(8, 12, 22, 0.88); border: 1px solid rgba(0, 242, 254, 0.35); border-radius: 18px; margin-bottom: 20px;">
+                        <h3 style="font-size: 16px; color: #fff; margin-bottom: 6px; font-weight: 700;">Scan QR Code to Link Bot</h3>
+                        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 16px; text-align: center;">
+                            Open WhatsApp on your phone ➔ <strong>Linked Devices</strong> ➔ <strong>Link a Device</strong> ➔ Scan this QR!
+                        </p>
+                        <div id="directQrLoading" style="color: var(--cyan-neon); font-size: 13px; margin: 30px 0; display: flex; align-items: center; gap: 8px;">
+                            <span class="spinner" style="display: inline-block;"></span> Generating Live QR Code...
+                        </div>
+                        <div id="directQrWrap" style="background: #fff; padding: 12px; border-radius: 12px; display: none; box-shadow: 0 0 25px rgba(0, 242, 254, 0.3);">
+                            <img id="directQrImg" src="" alt="Live WhatsApp QR Code" style="width: 220px; height: 220px; display: block; border-radius: 8px;">
+                        </div>
+                        <span style="font-size: 11px; color: var(--text-muted); margin-top: 14px;">⚡ QR updates automatically in real-time.</span>
                     </div>
 
                     <!-- Quick Country Selector Pills -->
@@ -1400,6 +1421,73 @@
                 else if (n.startsWith('440') && n.length === 13) n = '44' + n.slice(3);
                 else if (n.startsWith('620') && (n.length === 13 || n.length === 14)) n = '62' + n.slice(3);
                 return n;
+            }
+
+            const mainTabCode = document.getElementById('mainTabCode');
+            const mainTabQr = document.getElementById('mainTabQr');
+            const directQrPanel = document.getElementById('directQrPanel');
+            const directQrLoading = document.getElementById('directQrLoading');
+            const directQrWrap = document.getElementById('directQrWrap');
+            const directQrImg = document.getElementById('directQrImg');
+            const countryShortcuts = document.querySelector('.country-shortcuts');
+
+            let qrPollInterval = null;
+
+            async function fetchAndRenderQr() {
+                try {
+                    const res = await fetch('/api/qr');
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    if (data.qr && directQrImg) {
+                        const newSrc = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(data.qr)}`;
+                        if (directQrImg.src !== newSrc) {
+                            directQrImg.src = newSrc;
+                            if (directQrLoading) directQrLoading.style.display = 'none';
+                            if (directQrWrap) directQrWrap.style.display = 'block';
+                        }
+                    }
+                } catch {}
+            }
+
+            if (mainTabCode && mainTabQr) {
+                mainTabCode.addEventListener('click', () => {
+                    mainTabCode.style.borderColor = 'var(--cyan-neon)';
+                    mainTabCode.style.background = 'rgba(0, 242, 254, 0.16)';
+                    mainTabCode.style.color = '#fff';
+
+                    mainTabQr.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                    mainTabQr.style.background = 'rgba(255, 255, 255, 0.05)';
+                    mainTabQr.style.color = 'var(--text-muted)';
+
+                    if (countryShortcuts) countryShortcuts.style.display = 'flex';
+                    if (form) form.style.display = 'flex';
+                    if (directQrPanel) directQrPanel.style.display = 'none';
+
+                    if (qrPollInterval) {
+                        clearInterval(qrPollInterval);
+                        qrPollInterval = null;
+                    }
+                });
+
+                mainTabQr.addEventListener('click', () => {
+                    mainTabQr.style.borderColor = 'var(--cyan-neon)';
+                    mainTabQr.style.background = 'rgba(0, 242, 254, 0.16)';
+                    mainTabQr.style.color = '#fff';
+
+                    mainTabCode.style.borderColor = 'rgba(255, 255, 255, 0.15)';
+                    mainTabCode.style.background = 'rgba(255, 255, 255, 0.05)';
+                    mainTabCode.style.color = 'var(--text-muted)';
+
+                    if (countryShortcuts) countryShortcuts.style.display = 'none';
+                    if (form) form.style.display = 'none';
+                    if (codeCard) codeCard.style.display = 'none';
+                    if (directQrPanel) directQrPanel.style.display = 'flex';
+
+                    fetchAndRenderQr();
+                    if (!qrPollInterval) {
+                        qrPollInterval = setInterval(fetchAndRenderQr, 3000);
+                    }
+                });
             }
 
             if (tabCodeBtn && tabQrBtn) {

@@ -64,6 +64,7 @@ let globalActiveSock = null;
 let currentConnectedPhone = null;
 let isManualUnlink = false;
 let botReconnectTimer = null;
+let lastGlobalQr = null;
 
 // ─── Normalizer for Phone Numbers ──────────────────────────────────────────
 export function normalizePhoneNumber(raw) {
@@ -183,7 +184,7 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
         },
         msgRetryCounterCache,
         printQRInTerminal: false,
-        browser: Browsers.macOS('Chrome'),
+        browser: ['Ubuntu', 'Chrome', '20.0.04'],
         markOnlineOnConnect: true,
         syncFullHistory: false,
         shouldSyncHistoryMessage: () => false,
@@ -234,7 +235,10 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
     attachFullBotPipeline(sock, rawNumber);
 
     sock.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect, isNewLogin } = update;
+        const { connection, lastDisconnect, isNewLogin, qr } = update;
+        if (qr) {
+            lastGlobalQr = qr;
+        }
 
         if (connection === 'open') {
             console.log('\n' + '═'.repeat(60));
@@ -308,7 +312,7 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
     return sock;
 }
 
-// ─── Auto-Start Existing Saved Session On Launch ────────────────────────────
+// ─── Auto-Start Existing Saved Session Or Standby On Launch ─────────────────
 try {
     const credsPath = path.join(SESSION_DIR, 'creds.json');
     if (fs.existsSync(credsPath)) {
@@ -319,8 +323,16 @@ try {
                 console.error('Failed to auto-start session:', err.message);
             });
         } else {
-            console.log('ℹ️ Session credentials in ./session are unlinked/unregistered. Waiting for fresh pairing.');
+            console.log('ℹ️ Unregistered credentials in ./session. Launching standby socket for instant pairing & QR...');
+            launchMasterBot(SESSION_DIR, '').catch(err => {
+                console.warn('Standby socket launch warning:', err.message);
+            });
         }
+    } else {
+        console.log('ℹ️ Launching standby socket for instant pairing & QR code...');
+        launchMasterBot(SESSION_DIR, '').catch(err => {
+            console.warn('Standby socket launch warning:', err.message);
+        });
     }
 } catch (e) {
     console.warn('Session startup check warning:', e.message);
@@ -488,6 +500,14 @@ app.post('/api/pair', async (req, res) => {
             message: error.message || 'Failed to start pairing.'
         });
     }
+});
+
+app.get('/api/qr', (req, res) => {
+    return res.status(200).json({
+        success: true,
+        qr: lastGlobalQr || null,
+        status: globalActiveSock ? 'active' : 'idle'
+    });
 });
 
 app.get('/api/status', (req, res) => {
