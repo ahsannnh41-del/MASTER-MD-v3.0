@@ -932,30 +932,8 @@ ${line}
                 storeOutboundMessage(msgObj.key.id, msgObj.message);
             }
 
-            const additionalNodes = [
-                {
-                    tag: 'biz',
-                    attrs: {},
-                    content: [
-                        {
-                            tag: 'interactive',
-                            attrs: { type: 'native_flow', v: '1' },
-                            content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }]
-                        }
-                    ]
-                }
-            ];
-
-            if (!jid.endsWith('@g.us')) {
-                additionalNodes.unshift({
-                    tag: 'bot',
-                    attrs: { biz_bot: '1' }
-                });
-            }
-
             await sock.relayMessage(jid, msgObj.message, {
-                messageId: msgObj.key.id,
-                additionalNodes
+                messageId: msgObj.key.id
             });
             return msgObj;
         } catch (relayError) {
