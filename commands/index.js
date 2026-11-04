@@ -912,11 +912,6 @@ reg(['autotyping', 'automengetik', 'autoketik'], async (ctx) => {
 
 // ─── GOJO AI — mode chat AI ala Gojo Satoru, on/off per chat/grup ───────────
 reg(['masterai', 'ai', 'gojoai'], async (ctx) => {
-    // In groups: require Group Admin, Owner, or Creator.
-    // In private chat (DM): user can freely toggle AI for their own chat.
-    if (ctx.isGroup && !ctx.isAdmin && !ctx.isOwner && !ctx.isCreator) {
-        return ctx.reply('❌ Only *Group Admins*, *Owner*, or *Creator* can configure this mode.');
-    }
     const arg = (ctx.args?.[0] || '').toLowerCase();
     if (!['on', 'off', 'aktif', 'nonaktif'].includes(arg)) {
         return ctx.reply(
@@ -4053,12 +4048,33 @@ Tap any category button below, or type the command name (e.g. \`${prefix}menuadm
         const mediaBuf = fs.existsSync(bannerPath) ? fs.readFileSync(bannerPath) : null;
 
         const allButtons = [
-            { name: 'quick_reply', display_text: '🛡️ Admin Suite', id: `${prefix}menuadmin` },
-            { name: 'quick_reply', display_text: '📥 Downloader Suite', id: `${prefix}menumedia` },
-            { name: 'quick_reply', display_text: '🎮 Games Suite', id: `${prefix}menufun` },
-            { name: 'quick_reply', display_text: '🛠️ Tools Suite', id: `${prefix}menutools` },
-            { name: 'quick_reply', display_text: '👑 Owner Suite', id: `${prefix}menuowner` },
-            { name: 'cta_url', display_text: '📢 Official Channel', url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46' }
+            {
+                name: 'single_select',
+                buttonParamsJson: JSON.stringify({
+                    title: '📂 BROWSE CATEGORIES',
+                    sections: [
+                        {
+                            title: '⚡ COMMAND CATEGORY SUITES',
+                            rows: [
+                                { title: '🛡️ Admin Suite', description: 'Group protection, bans, moderation', id: `${prefix}menuadmin` },
+                                { title: '📥 Downloader Suite', description: 'TikTok, YouTube, Instagram, FB', id: `${prefix}menumedia` },
+                                { title: '🎮 Games & Fun Suite', description: 'Tic-tac-toe, slots, casino, quizzes', id: `${prefix}menufun` },
+                                { title: '🛠️ Tools & Utility Suite', description: 'Converters, QR, calculators, search', id: `${prefix}menutools` },
+                                { title: '🤖 Bot Settings Suite', description: 'Modes, autoread, autotyping', id: `${prefix}menubot` },
+                                { title: '👑 Owner & Creator Suite', description: 'Developer controls & broadcast', id: `${prefix}menuowner` },
+                                { title: '⚡ Check Ping Latency', description: 'Response speed & uptime', id: `${prefix}ping` }
+                            ]
+                        }
+                    ]
+                })
+            },
+            {
+                name: 'quick_reply',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '🔙 Main Menu',
+                    id: `${prefix}menu`
+                })
+            }
         ];
 
         try {
@@ -4072,6 +4088,12 @@ Tap any category button below, or type the command name (e.g. \`${prefix}menuadm
             });
         } catch (e) {
             log?.warn?.(`[allmenu] sendButton note: ${e.message}`);
+            if (mediaBuf) {
+                return await ctx.sock.sendMessage(ctx.jid, {
+                    image: mediaBuf,
+                    caption: categoryDashboard
+                }, { quoted: ctx.msg });
+            }
             return await ctx.reply(categoryDashboard);
         }
     }

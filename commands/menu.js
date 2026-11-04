@@ -2,7 +2,11 @@ import settings from '../setting.js';
 import { verifyIntegrity } from '../lib/integrity.js';
 
 verifyIntegrity(settings);
-import { sendButton, sendList, sendCarousel } from '../lib/interactiveButtons.js';
+import * as baileys from '@whiskeysockets/baileys';
+const baileysPkg = baileys.default || baileys;
+const prepareWAMessageMedia = baileys.prepareWAMessageMedia || baileysPkg.prepareWAMessageMedia;
+const generateWAMessageFromContent = baileys.generateWAMessageFromContent || baileysPkg.generateWAMessageFromContent;
+import { sendButton, sendList, sendCarousel, storeOutboundMessage } from '../lib/interactiveButtons.js';
 import { fmtDuration, safeReplyText, truncate, withTimeout } from '../lib/utils.js';
 import { resolveFfmpegPath } from '../lib/videoGen.js';
 import { spawn } from 'child_process';
@@ -662,6 +666,54 @@ function buildRegistryCategoryPack(category, label = category) {
     return `\n${blocks}`;
 }
 
+export function getBannerBuffer() {
+    const candidatePaths = [
+        path.join(process.cwd(), 'media', 'thumbnail.jpg'),
+        path.join(process.cwd(), 'media', 'thumbnail.png'),
+        path.join(process.cwd(), 'media', 'thumbnail_opt.jpg')
+    ];
+    for (const cp of candidatePaths) {
+        try {
+            if (fs.existsSync(cp)) return fs.readFileSync(cp);
+        } catch {}
+    }
+    return null;
+}
+
+export function getSubmenuButtons(current = '') {
+    const allCategories = [
+        { title: '🛡️ Group Administration', description: 'Anti-link, kick, mute, security & moderation', id: `${P}menuadmin` },
+        { title: '📥 Social Downloaders', description: 'TikTok watermark-free, YouTube, Instagram, FB', id: `${P}menumedia` },
+        { title: '🎮 Interactive Games', description: 'Tic-tac-toe, slots, dino runner, racing, snake', id: `${P}menufun` },
+        { title: '🛠️ Utilities & Converters', description: 'Removebg, QR codes, encoders, text tools', id: `${P}menutools` },
+        { title: '🤖 Bot Configuration', description: 'Autoread, autotyping, public/private modes', id: `${P}menubot` },
+        { title: '👑 Owner Suite', description: 'Creator tools and system management', id: `${P}menuowner` },
+        { title: '⚡ Check Ping Latency', description: 'Response speed and server uptime', id: `${P}ping` }
+    ].filter(c => !current || !c.id.includes(current));
+
+    return [
+        {
+            name: 'single_select',
+            buttonParamsJson: JSON.stringify({
+                title: '📂 Other Categories',
+                sections: [
+                    {
+                        title: '📂 MASTER MD CATEGORIES',
+                        rows: allCategories
+                    }
+                ]
+            })
+        },
+        {
+            name: 'quick_reply',
+            buttonParamsJson: JSON.stringify({
+                display_text: '🔙 Back to Main Menu',
+                id: `${P}menu`
+            })
+        }
+    ];
+}
+
 // ─── MAIN MENU (LIGHTWEIGHT, ZERO-LAG, BULLETPROOF DELIVERY) ────────
 export async function sendMainMenu(reply, sender, sock, jid, msg, opts = {}) {
     const now     = Date.now();
@@ -677,43 +729,49 @@ export async function sendMainMenu(reply, sender, sock, jid, msg, opts = {}) {
     const nodeVersion = process.version;
     const ramUsageMb  = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
 
+    const tagUser = namaTampil;
+    const line = '━━━━━━━━━━━━━━━━━━━━━━';
+
     const menuText =
-`👋 Assalam-o-Alaikum, *${namaTampil}*! Welcome to *${BOT}* ⚡ — developed by *AHSAN*.
-_${TAG}_
+`╔══════════════════════╗
+   ⚡ ＭＡＳＴＥＲ  ＭＤ ⚡
+╚══════════════════════╝
+> Welcome to MASTER MD
+Developed by AHSAN ✦ , ${tagUser}
+*Interactive button menu in bottom sheet below*
 
-┏ 👤 ${sc('User')}     : ${namaTampil}
-┃ 👑 ${sc('Developer')}: AHSAN (03107260507)
-┃ 🌟 ${sc('Status')}   : ${statusLabel}
-┗ ⚡ ${sc('Mode')}     : ${mode}
+${line}
 
-┏ 📦 ${sc('Version')}  : v${settings.botVersion || '3.0.0'}
-┃ 🟢 ${sc('Node.js')}  : ${nodeVersion}
-┗ 📚 ${sc('Engine')}   : Baileys Multi-Device
+▸ SYSTEM INFO
+• Bot Name   : MASTER MD
+• Developer  : AHSAN (03107260507)
+• Status     : ${statusLabel}
+• Mode       : ${mode}
+• Version    : v${settings.botVersion || '3.0.0'}
+• Node.js    : ${nodeVersion}
+• Engine     : Baileys Multi-Device
+• RAM Usage  : ${ramUsageMb} MB
+• Uptime     : ${fmtDuration(now - botStartTime)}
+• Features   : ${totalFeatures || '2025'} Active
+• Prefix     : \`${P}\`
 
-┏ 💾 ${sc('RAM')}      : ${ramUsageMb} MB
-┃ ⏰ ${sc('Runtime')}  : ${fmtDuration(now - botStartTime)}
-┃ 📊 ${sc('Features')} : ${totalFeatures || '2000+'} Active
-┗ 🔖 ${sc('Prefix')}   : \`${P}\`
+${line}
 
-${sc('Fast')} • ${sc('Stable')} • ${sc('Secure')}
-⚡ ${sc('DEVELOPED BY')} : AHSAN
-🌐 ${settings.channelName || 'MASTER MD Official'}
-
-╭─〔 📋 ${sc('Command Suites')} 〕
-│ 1️⃣ \`${P}allmenu\`   — View all 2,000+ active commands
+▸ COMMAND SUITES
+│ 1️⃣ \`${P}allmenu\`   — Complete 2,000+ command catalog
 │ 2️⃣ \`${P}owner\`     — Developer contact & info
 │ 3️⃣ \`${P}pair\`      — Web pairing code generator
 │ 4️⃣ \`${P}credits\`   — Official Channel & updates
-│ 5️⃣ \`${P}menuadmin\` — Group admin & moderation tools
-│ 6️⃣ \`${P}ai\`        — Smart AI chatbot & prompts
-│ 7️⃣ \`${P}menumedia\` — Media downloaders & video tools
-│ 8️⃣ \`${P}menutools\` — Utility tools & converters
-│ 9️⃣ \`${P}ping\`      — Check latency & server status
+│ 5️⃣ \`${P}menuadmin\` — Group protection & admin tools
+│ 6️⃣ \`${P}menufun\`   — Interactive games & casino suite
+│ 7️⃣ \`${P}menumedia\` — High-speed video downloaders
+│ 8️⃣ \`${P}menutools\` — Converters, tools & encoders
+│ 9️⃣ \`${P}ping\`      — Latency & connection speed
 ╰──────────────────────────────
-💡 _Reply with 1–9 to open any menu immediately!_
+💡 _Tap the buttons below or reply 1–9 to open any suite!_
 
-👑 *Developer:* AHSAN (03107260507)
-📢 *Official Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46`;
+${line}
+"Thank you for using MASTER MD by AHSAN ⚡"`;
 
     markMenuPending(sender);
 
@@ -733,18 +791,30 @@ ${sc('Fast')} • ${sc('Stable')} • ${sc('Secure')}
             } catch {}
         }
 
+        const dashboardSections = [
+            {
+                title: '⚡ MASTER MD QUICK ACCESS',
+                highlight_label: '⭐ POPULAR',
+                rows: [
+                    { title: '🤖 All 2000+ Commands', description: 'Complete directory of all bot features', id: `${P}allmenu` },
+                    { title: '⚡ Check Ping Latency', description: 'Test response speed and server uptime', id: `${P}ping` },
+                    { title: '👑 Developer Contact', description: 'Official developer info: AHSAN (03107260507)', id: `${P}owner` },
+                    { title: '📱 Web Pairing Portal', description: 'Link your WhatsApp via 8-digit code', id: `${P}pair` },
+                    { title: '📢 Official Channel', description: 'Join updates and release news', id: `${P}credits` }
+                ]
+            }
+        ];
+
         const categorySections = [
             {
-                title: '⚡ MASTER MD COMMAND SUITES',
+                title: '📂 COMMAND CATEGORIES',
                 rows: [
-                    { title: '🤖 Complete Command Directory', description: 'Browse all 2,000+ commands in one place', id: `${P}allmenu` },
-                    { title: '🛡️ Group Administration Suite', description: 'Anti-spam, anti-link, bans, mute & admin tools', id: `${P}menuadmin` },
-                    { title: '📥 Social Media Downloaders', description: 'TikTok, YouTube, Instagram & Facebook downloader', id: `${P}menumedia` },
-                    { title: '🧠 Smart Artificial Intelligence', description: 'AI chat assistant, GPT, and smart responses', id: `${P}ai` },
-                    { title: '🎮 Games & Entertainment Suite', description: 'Interactive games, quizzes, trivia and fun', id: `${P}menufun` },
-                    { title: '🛠️ Utilities & Developer Tools', description: 'Code converters, QR codes, encoders and utilities', id: `${P}menutools` },
-                    { title: '👑 Bot Owner & Developer Info', description: 'Official developer contact (AHSAN)', id: `${P}owner` },
-                    { title: '⚡ Check System Latency', description: 'Test bot response speed and ping status', id: `${P}ping` }
+                    { title: '🛡️ Group Administration', description: 'Anti-link, kick, mute, security & moderation', id: `${P}menuadmin` },
+                    { title: '📥 Social Downloaders', description: 'TikTok watermark-free, YouTube, Instagram, FB', id: `${P}menumedia` },
+                    { title: '🎮 Interactive Games', description: 'Tic-tac-toe, slots, dino runner, racing, snake', id: `${P}menufun` },
+                    { title: '🛠️ Utilities & Converters', description: 'Removebg, QR codes, encoders, text tools', id: `${P}menutools` },
+                    { title: '🤖 Bot Configuration', description: 'Autoread, autotyping, public/private modes', id: `${P}menubot` },
+                    { title: '👑 Owner Suite', description: 'Creator tools and system management', id: `${P}menuowner` }
                 ]
             }
         ];
@@ -752,43 +822,125 @@ ${sc('Fast')} • ${sc('Stable')} • ${sc('Secure')}
         const buttons = [
             {
                 name: 'single_select',
-                title: '📂 Open Command Suites',
-                sections: categorySections
+                buttonParamsJson: JSON.stringify({
+                    title: '⚡ MASTER MD DASHBOARD',
+                    sections: dashboardSections
+                })
             },
             {
-                name: 'quick_reply',
-                display_text: '🤖 All 2000+ Commands',
-                id: `${P}allmenu`
-            },
-            {
-                name: 'quick_reply',
-                display_text: '⚡ Ping Speed',
-                id: `${P}ping`
-            },
-            {
-                name: 'cta_url',
-                display_text: '📢 Official Channel',
-                url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46'
+                name: 'single_select',
+                buttonParamsJson: JSON.stringify({
+                    title: '📂 COMMAND CATEGORIES',
+                    sections: categorySections
+                })
             }
         ];
 
-        try {
-            return await sendButton(sock, jid, {
-                text: menuText,
-                footer: `⚡ ${BOT} v${settings.botVersion || '3.0.0'} • Dev: AHSAN (03107260507)`,
-                title: `⚡ ${BOT} COMMAND CENTER ⚡`,
-                media: mediaBuffer,
-                buttons,
-                quoted: msg
-            });
-        } catch (e) {
-            log?.warn?.(`[menu] sendButton fallback: ${e.message}`);
-            if (mediaBuffer) {
-                return await sock.sendMessage(jid, {
-                    image: mediaBuffer,
-                    caption: menuText
-                });
+        const messageParamsJson = JSON.stringify({
+            limited_time_offer: {
+                text: 'MASTER MD',
+                url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46',
+                copy_code: 'MASTER-MD',
+                expiration_time: 1754613436864329
+            },
+            bottom_sheet: {
+                in_thread_buttons_limit: 1,
+                divider_indices: [1],
+                list_title: '⚡ MASTER MD',
+                button_title: '📂 Open Menu'
+            },
+            tap_target_configuration: {
+                title: '▸ MASTER MD ◂',
+                description: 'Next-Gen Command Center',
+                canonical_url: settings.channelUrl || 'https://whatsapp.com',
+                domain: 'https://whatsapp.com',
+                button_index: 0
             }
+        });
+
+        let mediaMessage = null;
+        if (sock.waUploadToServer) {
+            try {
+                const videoPath = path.join(process.cwd(), 'media', 'menu.mp4');
+                if (fs.existsSync(videoPath)) {
+                    const videoBuffer = fs.readFileSync(videoPath);
+                    mediaMessage = await prepareWAMessageMedia(
+                        { video: videoBuffer, gifPlayback: true },
+                        { upload: sock.waUploadToServer }
+                    );
+                } else if (mediaBuffer) {
+                    mediaMessage = await prepareWAMessageMedia(
+                        { image: mediaBuffer },
+                        { upload: sock.waUploadToServer }
+                    );
+                }
+            } catch (mediaErr) {
+                console.warn('[menu] prepareWAMessageMedia error:', mediaErr.message);
+            }
+        }
+
+        const isSelf = !!(msg?.key?.fromMe || (sock.user?.id && jid.includes(sock.user.id.split('@')[0].split(':')[0])));
+        const quoteObj = isSelf ? null : msg;
+
+        const hasMedia = !!(mediaMessage?.videoMessage || mediaMessage?.imageMessage);
+        const header = hasMedia
+            ? {
+                hasMediaAttachment: true,
+                ...(mediaMessage?.videoMessage ? { videoMessage: mediaMessage.videoMessage } : {}),
+                ...(mediaMessage?.imageMessage ? { imageMessage: mediaMessage.imageMessage } : {})
+              }
+            : {
+                title: '⚡ MASTER MD COMMAND CENTER ⚡',
+                hasMediaAttachment: false
+              };
+
+        const interactiveMessage = {
+            header,
+            body: {
+                text: menuText
+            },
+            footer: {
+                text: `⚡ MASTER MD v${settings.botVersion || '3.0.0'} • Dev: AHSAN (03107260507)`
+            },
+            nativeFlowMessage: {
+                buttons,
+                messageParamsJson
+            },
+            contextInfo: {
+                mentionedJid: sender ? [sender] : [],
+                isForwarded: true,
+                forwardingScore: 999999
+            }
+        };
+
+        try {
+            const msgObj = generateWAMessageFromContent(jid, {
+                viewOnceMessage: {
+                    message: {
+                        interactiveMessage
+                    }
+                }
+            }, {
+                userJid: sock.user?.jid || (sock.user?.id ? `${sock.user.id.split(':')[0]}@s.whatsapp.net` : undefined),
+                quoted: quoteObj
+            });
+
+            if (msgObj?.key?.id && msgObj?.message) {
+                storeOutboundMessage(msgObj.key.id, msgObj.message);
+            }
+
+            await sock.relayMessage(jid, msgObj.message, { messageId: msgObj.key.id });
+            return msgObj;
+        } catch (relayError) {
+            console.warn('[menu] relayMessage failed, sending fallback image message:', relayError.message);
+        }
+
+        // Bulletproof Fallback: ALWAYS SEND BANNER IMAGE WITH CAPTION
+        if (mediaBuffer) {
+            return await sock.sendMessage(jid, {
+                image: mediaBuffer,
+                caption: menuText
+            }, { quoted: quoteObj });
         }
     }
 
@@ -1121,10 +1273,9 @@ export function getFeatureDescription(name) {
 }
 
 // ─── ADMIN MENU (ENGLISH) ──────────────────────────────────────────
-export async function sendAdminMenu(reply) {
+export async function sendAdminMenu(reply, sock, jid, msg) {
     const adminPack = buildRegistryCategoryPack('🛡️ Admin', '🛡️ Admin');
-
-    await reply(
+    const text =
 `╔══════════════════════════════════════╗
 ║   🛡️  *${sc('ADMIN & GROUP MANAGEMENT')}*
 ╚══════════════════════════════════════╝
@@ -1298,8 +1449,23 @@ export async function sendAdminMenu(reply) {
 │ ${P}quickunlock        — Lift emergency lockdown
 │ ${P}grouplinkqr        — QR code for group invite link
 │ ${P}previewwelcome     — Preview welcome message
-╰──────────────────────────────${adminPack}`
-    );
+╰──────────────────────────────${adminPack}
+
+👑 *Developer:* AHSAN (03107260507)
+📢 *Official Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46`;
+
+    if (sock && jid) {
+        return await sendButton(sock, jid, {
+            text,
+            footer: '⚡ MASTER MD • Developed by AHSAN (03107260507)',
+            title: '🛡️ GROUP ADMINISTRATION SUITE 🛡️',
+            media: getBannerBuffer(),
+            buttons: getSubmenuButtons('admin'),
+            quoted: msg
+        });
+    }
+
+    await reply(text);
 }
 
 // ─── FUN MENU (ENGLISH) ────────────────────────────────────────────
@@ -1353,18 +1519,12 @@ export async function sendFunMenu(reply, sock, jid, msg) {
 📢 *Official Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46`;
 
     if (sock && jid) {
-        const buttons = [
-            { name: 'quick_reply', display_text: '🎮 Play Tic-Tac-Toe', id: `${P}xo start` },
-            { name: 'quick_reply', display_text: '🎰 Spin Slots', id: `${P}slots` },
-            { name: 'quick_reply', display_text: '🔙 Main Menu', id: `${P}menu` },
-            { name: 'cta_url', display_text: '📢 Official Channel', url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46' }
-        ];
-
         return await sendButton(sock, jid, {
             text,
             footer: '⚡ MASTER MD • Developed by AHSAN (03107260507)',
             title: '🎮 GAMES & ENTERTAINMENT SUITE 🎮',
-            buttons,
+            media: getBannerBuffer(),
+            buttons: getSubmenuButtons('fun'),
             quoted: msg
         });
     }
@@ -1429,18 +1589,12 @@ export async function sendToolsMenu(reply, sock, jid, msg) {
 📢 *Official Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46`;
 
     if (sock && jid) {
-        const buttons = [
-            { name: 'quick_reply', display_text: '⚡ Ping Speed', id: `${P}ping` },
-            { name: 'quick_reply', display_text: '🔙 Main Menu', id: `${P}menu` },
-            { name: 'quick_reply', display_text: '🤖 All Commands', id: `${P}allmenu` },
-            { name: 'cta_url', display_text: '📢 Official Channel', url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46' }
-        ];
-
         return await sendButton(sock, jid, {
             text,
             footer: '⚡ MASTER MD • Developed by AHSAN (03107260507)',
             title: '🛠️ UTILITY & DEVELOPER TOOLS 🛠️',
-            buttons,
+            media: getBannerBuffer(),
+            buttons: getSubmenuButtons('tools'),
             quoted: msg
         });
     }
@@ -1501,18 +1655,12 @@ export async function sendMediaMenu(reply, sock, jid, msg) {
 📢 *Official Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46`;
 
     if (sock && jid) {
-        const buttons = [
-            { name: 'quick_reply', display_text: '🔙 Main Menu', id: `${P}menu` },
-            { name: 'quick_reply', display_text: '⚡ Ping Speed', id: `${P}ping` },
-            { name: 'quick_reply', display_text: '🤖 All Commands', id: `${P}allmenu` },
-            { name: 'cta_url', display_text: '📢 Official Channel', url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46' }
-        ];
-
         return await sendButton(sock, jid, {
             text,
             footer: '⚡ MASTER MD • Developed by AHSAN (03107260507)',
             title: '🖼️ MEDIA & DOWNLOADER SUITE 🖼️',
-            buttons,
+            media: getBannerBuffer(),
+            buttons: getSubmenuButtons('media'),
             quoted: msg
         });
     }
@@ -1562,18 +1710,12 @@ export async function sendBotMenu(reply, sock, jid, msg) {
 📢 *Official Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46`;
 
     if (sock && jid) {
-        const buttons = [
-            { name: 'quick_reply', display_text: '🔙 Main Menu', id: `${P}menu` },
-            { name: 'quick_reply', display_text: '⚡ Ping Speed', id: `${P}ping` },
-            { name: 'quick_reply', display_text: '🤖 All Commands', id: `${P}allmenu` },
-            { name: 'cta_url', display_text: '📢 Official Channel', url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46' }
-        ];
-
         return await sendButton(sock, jid, {
             text,
             footer: '⚡ MASTER MD • Developed by AHSAN (03107260507)',
             title: '🤖 BOT SYSTEM CONTROLS 🤖',
-            buttons,
+            media: getBannerBuffer(),
+            buttons: getSubmenuButtons('bot'),
             quoted: msg
         });
     }
@@ -1604,18 +1746,12 @@ export async function sendOwnerMenu(reply, sock, jid, msg) {
 > © 2026 MASTER MD • All Rights Reserved to AHSAN`;
 
     if (sock && jid) {
-        const buttons = [
-            { name: 'quick_reply', display_text: '🔙 Main Menu', id: `${P}menu` },
-            { name: 'quick_reply', display_text: '⚡ Ping Speed', id: `${P}ping` },
-            { name: 'quick_reply', display_text: '🤖 All Commands', id: `${P}allmenu` },
-            { name: 'cta_url', display_text: '📢 Official Channel', url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46' }
-        ];
-
         return await sendButton(sock, jid, {
             text,
             footer: '⚡ MASTER MD • Developed by AHSAN (03107260507)',
             title: '👑 DEVELOPER & OWNER SUITE 👑',
-            buttons,
+            media: getBannerBuffer(),
+            buttons: getSubmenuButtons('owner'),
             quoted: msg
         });
     }
@@ -1641,18 +1777,12 @@ export async function sendAiMenu(reply, sock, jid, msg) {
 > © 2026 MASTER MD • Developed by AHSAN`;
 
     if (sock && jid) {
-        const buttons = [
-            { name: 'quick_reply', display_text: '🔙 Main Menu', id: `${P}menu` },
-            { name: 'quick_reply', display_text: '⚡ Ping Speed', id: `${P}ping` },
-            { name: 'quick_reply', display_text: '🤖 All Commands', id: `${P}allmenu` },
-            { name: 'cta_url', display_text: '📢 Official Channel', url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46' }
-        ];
-
         return await sendButton(sock, jid, {
             text,
             footer: '⚡ MASTER MD • Developed by AHSAN (03107260507)',
             title: '🧠 ARTIFICIAL INTELLIGENCE SUITE 🧠',
-            buttons,
+            media: getBannerBuffer(),
+            buttons: getSubmenuButtons('ai'),
             quoted: msg
         });
     }
