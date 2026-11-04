@@ -343,10 +343,21 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
                 }
             } catch {}
 
-            // For unregistered standby sessions, 401/408 simply means QR code expired — NOT logged out!
-            const isLoggedOut = isRegistered && (statusCode === DisconnectReason?.loggedOut || statusCode === 401 || statusCode === 403);
+            // Detect if logged out or unlinked by WhatsApp
+            const wasConnected = !!currentConnectedPhone || isRegistered;
+            const isLoggedOut = wasConnected && (
+                statusCode === DisconnectReason?.loggedOut ||
+                statusCode === 401 ||
+                statusCode === 403 ||
+                String(lastDisconnect?.error?.message || '').toLowerCase().includes('logged out') ||
+                String(lastDisconnect?.error?.message || '').toLowerCase().includes('unauthorized') ||
+                String(lastDisconnect?.error?.message || '').toLowerCase().includes('conflict')
+            );
 
-            console.log(`[MASTER MD] Socket connection closed (Code: ${statusCode || 'unknown'}, isRegistered: ${isRegistered}).`);
+            // While closed, socket is NOT online - clear currentConnectedPhone so API never reports fake connected state
+            currentConnectedPhone = null;
+
+            console.log(`[MASTER MD] Socket connection closed (Code: ${statusCode || 'unknown'}, isRegistered: ${isRegistered}, isLoggedOut: ${isLoggedOut}).`);
 
             if (botReconnectTimer) {
                 clearTimeout(botReconnectTimer);
@@ -373,10 +384,28 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
                     launchMasterBot(customDir, rawNumber);
                 }, reconnectDelay);
             } else {
-                console.log(`[MASTER MD] Session logged out or manually unlinked (Code: ${statusCode || 'unknown'}).`);
+                console.log(`[MASTER MD] Session logged out or unlinked by user (Code: ${statusCode || 'unknown'}). Purging session and starting fresh standby socket...`);
                 currentConnectedPhone = null;
                 globalActiveSock = null;
                 lastGlobalQr = null;
+
+                try {
+                    if (fs.existsSync(customDir)) {
+                        const files = fs.readdirSync(customDir);
+                        for (const f of files) {
+                            if (f !== 'pairing_history.json') {
+                                fs.rmSync(path.join(customDir, f), { recursive: true, force: true });
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[Session Purge Warning]:', e.message);
+                }
+
+                botReconnectTimer = setTimeout(() => {
+                    botReconnectTimer = null;
+                    launchMasterBot(customDir, '');
+                }, 1000);
             }
         }
     });
@@ -582,8 +611,21 @@ app.get('/api/qr', async (req, res) => {
     try {
         const forceRefresh = req.query.refresh === '1' || req.query.force === 'true';
 
-        // If bot is already connected, notify client
-        if (currentConnectedPhone && globalActiveSock) {
+        // Check if the bot is TRULY connected with an active, open WebSocket and authenticated user
+        const isTrulyConnected = !!(
+            currentConnectedPhone &&
+            globalActiveSock &&
+            globalActiveSock.user?.id &&
+            globalActiveSock.ws?.readyState === 1
+        );
+
+        if (!isTrulyConnected && currentConnectedPhone) {
+            console.log('[MASTER MD] Stale connection detected. Clearing currentConnectedPhone...');
+            currentConnectedPhone = null;
+        }
+
+        // If truly connected and not forcing a refresh, return connected status
+        if (isTrulyConnected && !forceRefresh) {
             return res.status(200).json({
                 success: true,
                 status: 'connected',
@@ -596,6 +638,7 @@ app.get('/api/qr', async (req, res) => {
         if (forceRefresh || !globalActiveSock || (!lastGlobalQr && !botReconnectTimer)) {
             console.log('[MASTER MD] Spin up / refresh standby socket for live QR code...');
             lastGlobalQr = null;
+            currentConnectedPhone = null;
 
             if (globalActiveSock) {
                 try {
@@ -701,6 +744,50 @@ app.post('/api/clean-session', async (req, res) => {
         return res.status(200).json({
             success: true,
             message: 'Session cleared! Stale keys purged. Ready for fresh pairing.'
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+// Explicit Unlink / Disconnect API for web portal
+app.post('/api/unlink', async (req, res) => {
+    try {
+        console.log('\n🛑 [Web Portal] Manual unlink/disconnect requested...');
+        if (botReconnectTimer) {
+            clearTimeout(botReconnectTimer);
+            botReconnectTimer = null;
+        }
+        if (globalActiveSock) {
+            try {
+                globalActiveSock.ev.removeAllListeners();
+                await globalActiveSock.logout().catch(() => {});
+                globalActiveSock.end();
+            } catch {}
+            globalActiveSock = null;
+            await delay(200);
+        }
+        currentConnectedPhone = null;
+        lastGlobalQr = null;
+
+        if (fs.existsSync(SESSION_DIR)) {
+            const files = fs.readdirSync(SESSION_DIR);
+            for (const f of files) {
+                if (f !== 'pairing_history.json') {
+                    fs.rmSync(path.join(SESSION_DIR, f), { recursive: true, force: true });
+                }
+            }
+        }
+        messageStore.clear();
+
+        // Launch fresh standby socket
+        launchMasterBot(SESSION_DIR, '').catch(err => {
+            console.warn('Standby launch after unlink warning:', err.message);
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: 'Device unlinked! Stale credentials purged. Ready for fresh pairing.'
         });
     } catch (err) {
         return res.status(500).json({ success: false, message: err.message });
