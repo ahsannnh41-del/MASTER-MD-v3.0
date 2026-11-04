@@ -60,7 +60,17 @@ if (fs.existsSync(path.join(__dirname, 'web-pairing'))) {
 // In-Memory Session & Message Store for E2EE Retry Decryption
 const sessions = new Map();
 const messageStore = new Map();
-const msgRetryCounterCache = new NodeCache({ stdTTL: 5 * 60, useClones: false });
+const msgRetryCounterCache = {
+    _map: new Map(),
+    get(key) { return this._map.get(String(key)); },
+    set(key, val) { this._map.set(String(key), val); },
+    del(key) { this._map.delete(String(key)); },
+    has(key) { return this._map.has(String(key)); }
+};
+const makeInMemoryStore = baileysPkg.makeInMemoryStore || baileysPkg.default?.makeInMemoryStore;
+const pinoLog = pino({ level: 'silent' });
+const store = typeof makeInMemoryStore === 'function' ? makeInMemoryStore({ logger: pinoLog }) : null;
+
 let globalActiveSock = null;
 let currentConnectedPhone = null;
 let isManualUnlink = false;
@@ -213,12 +223,27 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
         keepAliveIntervalMs: 10_000,
         cachedGroupMetadata: async (jid) => groupMetadataCache.get(jid),
         getMessage: async (key) => {
+            if (store && key?.remoteJid && key?.id) {
+                try {
+                    const msg = await store.loadMessage(key.remoteJid, key.id);
+                    if (msg?.message) return msg.message;
+                } catch {}
+            }
             const m = messageStore.get(key?.id);
             if (m?.message) return m.message;
             if (m) return m;
             return undefined;
         },
     });
+
+    // Bind in-memory store to socket events for permanent retry encryption resolution
+    if (store) {
+        try {
+            store.bind(sock.ev);
+        } catch (e) {
+            console.warn('[store.bind warning]:', e.message);
+        }
+    }
 
     // Update group metadata cache on group updates
     sock.ev.on('groups.update', async ([update]) => {
@@ -639,6 +664,47 @@ app.get('/api/status', (req, res) => {
                     ? (sess.error || 'Pairing failed.')
                     : 'Generating pairing code, please wait...'
     });
+});
+
+app.post('/api/clean-session', async (req, res) => {
+    try {
+        console.log('\n🧹 [MASTER MD] Cleaning all stale session keys and resetting bot...');
+        if (botReconnectTimer) {
+            clearTimeout(botReconnectTimer);
+            botReconnectTimer = null;
+        }
+        if (globalActiveSock) {
+            try {
+                globalActiveSock.ev.removeAllListeners();
+                globalActiveSock.end();
+            } catch {}
+            globalActiveSock = null;
+            await delay(300);
+        }
+        if (fs.existsSync(SESSION_DIR)) {
+            const files = fs.readdirSync(SESSION_DIR);
+            for (const f of files) {
+                if (f !== 'pairing_history.json') {
+                    fs.rmSync(path.join(SESSION_DIR, f), { recursive: true, force: true });
+                }
+            }
+        }
+        lastGlobalQr = null;
+        currentConnectedPhone = null;
+        messageStore.clear();
+
+        // Launch clean standby socket for immediate fresh pairing/QR
+        launchMasterBot(SESSION_DIR, '').catch(err => {
+            console.warn('Standby launch after clean warning:', err.message);
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: 'Session cleared! Stale keys purged. Ready for fresh pairing.'
+        });
+    } catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
+    }
 });
 
 app.get('/health', (req, res) => {

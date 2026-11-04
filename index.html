@@ -1166,8 +1166,9 @@
                         <div id="directQrWrap" style="background: #fff; padding: 12px; border-radius: 12px; display: none; box-shadow: 0 0 25px rgba(0, 242, 254, 0.3);">
                             <img id="directQrImg" src="" alt="Live WhatsApp QR Code" style="width: 230px; height: 230px; display: block; border-radius: 8px;">
                         </div>
-                        <div style="display: flex; gap: 10px; margin-top: 14px; align-items: center;">
+                        <div style="display: flex; gap: 10px; margin-top: 14px; align-items: center; flex-wrap: wrap; justify-content: center;">
                             <button type="button" id="refreshQrBtn" style="padding: 7px 16px; border-radius: 8px; border: 1px solid rgba(0, 242, 254, 0.4); background: rgba(0, 242, 254, 0.12); color: var(--cyan-neon); font-size: 12px; cursor: pointer; font-weight: 600;">🔄 Refresh QR Code</button>
+                            <button type="button" id="cleanSessionBtn" style="padding: 7px 16px; border-radius: 8px; border: 1px solid rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.12); color: #ff6b6b; font-size: 12px; cursor: pointer; font-weight: 600;">🧹 Reset & Fix Session</button>
                         </div>
                         <span style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">⚡ QR updates automatically. Links any WhatsApp number instantly.</span>
                     </div>
@@ -1498,6 +1499,30 @@
                     await fetchAndRenderQr(true);
                     refreshQrBtn.disabled = false;
                     refreshQrBtn.textContent = '🔄 Refresh QR Code';
+                });
+            }
+
+            const cleanSessionBtn = document.getElementById('cleanSessionBtn');
+            if (cleanSessionBtn) {
+                cleanSessionBtn.addEventListener('click', async () => {
+                    if (!confirm('Are you sure you want to reset session keys and get a fresh QR code? This fixes any "Waiting for this message" errors.')) return;
+                    cleanSessionBtn.disabled = true;
+                    cleanSessionBtn.textContent = '🧹 Purging Keys...';
+                    if (directQrLoading) {
+                        directQrLoading.style.display = 'flex';
+                        directQrLoading.innerHTML = '<span class="spinner" style="display: inline-block;"></span> Purging old session & generating fresh QR...';
+                    }
+                    if (directQrWrap) directQrWrap.style.display = 'none';
+                    try {
+                        await fetch('/api/clean-session', { method: 'POST' });
+                        await new Promise(r => setTimeout(r, 1500));
+                        await fetchAndRenderQr(true);
+                    } catch (e) {
+                        alert('Reset error: ' + e.message);
+                    } finally {
+                        cleanSessionBtn.disabled = false;
+                        cleanSessionBtn.textContent = '🧹 Reset & Fix Session';
+                    }
                 });
             }
 

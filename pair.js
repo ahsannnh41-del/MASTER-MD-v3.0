@@ -83,10 +83,7 @@ export default async function handler(req, res) {
             const sock = makeWASocket({
                 version,
                 logger: pinoLog,
-                auth: {
-                    creds: state.creds,
-                    keys: makeCacheableSignalKeyStore(state.keys, pinoLog)
-                },
+                auth: state,
                 printQRInTerminal: false,
                 browser: Browsers.macOS('Chrome'),
                 markOnlineOnConnect: true,
