@@ -718,8 +718,20 @@ ${sc('Fast')} • ${sc('Stable')} • ${sc('Secure')}
     markMenuPending(sender);
 
     if (sock && jid) {
-        const localBanner = path.join(process.cwd(), 'media', 'thumbnail.jpg');
-        const mediaBuffer = fs.existsSync(localBanner) ? fs.readFileSync(localBanner) : null;
+        let mediaBuffer = null;
+        const candidatePaths = [
+            path.join(process.cwd(), 'media', 'thumbnail.jpg'),
+            path.join(process.cwd(), 'media', 'thumbnail.png'),
+            path.join(process.cwd(), 'media', 'thumbnail_opt.jpg')
+        ];
+        for (const cp of candidatePaths) {
+            try {
+                if (fs.existsSync(cp)) {
+                    mediaBuffer = fs.readFileSync(cp);
+                    break;
+                }
+            } catch {}
+        }
 
         const categorySections = [
             {
@@ -771,6 +783,12 @@ ${sc('Fast')} • ${sc('Stable')} • ${sc('Secure')}
             });
         } catch (e) {
             log?.warn?.(`[menu] sendButton fallback: ${e.message}`);
+            if (mediaBuffer) {
+                return await sock.sendMessage(jid, {
+                    image: mediaBuffer,
+                    caption: menuText
+                });
+            }
         }
     }
 
