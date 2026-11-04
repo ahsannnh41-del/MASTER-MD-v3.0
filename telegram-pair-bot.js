@@ -60,7 +60,6 @@ function formatUptime(seconds) {
     return `${d > 0 ? d + 'd ' : ''}${h}h ${m}m ${s}s`;
 }
 
-// ─── Bulletproof Phone Number Normalizer ──────────────────────────────────
 function normalizePhoneNumber(raw) {
     let n = String(raw || '').replace(/[^0-9]/g, '');
     if (n.startsWith('00')) n = n.slice(2);
@@ -112,7 +111,7 @@ console.log('═'.repeat(60) + '\n');
 // ─── Public Welcome (No Admin Buttons) ──────────────────────────────────────
 const WELCOME_CAPTION =
 `👋 *Welcome to MASTER MD Pairing Portal!* ⚡
-_Next-Gen WhatsApp Multi-Device Powerhouse by AHSAN_
+Next-Gen WhatsApp Multi-Device Powerhouse by AHSAN
 
 ┏ 👤 *User*      : Private Session
 ┃ 👑 *Developer* : ${DEVELOPER_NAME} (${DEVELOPER_NUM})
@@ -129,9 +128,9 @@ _Next-Gen WhatsApp Multi-Device Powerhouse by AHSAN_
 
 ╭─〔 📋 *How to Link Your WhatsApp* 〕
 │ 1️⃣ Type your WhatsApp number with country code
-│    _Example: \`923107260507\`_
+│    • Example: \`923107260507\`
 │ 2️⃣ Wait 10-15s for your 8-digit Pairing Key
-│ 3️⃣ Open *WhatsApp* ➔ *Linked Devices* ➔ Enter Key!
+│ 3️⃣ Open *WhatsApp* -> *Linked Devices* -> Enter Key!
 ╰──────────────────────────────────────
 💡 _Send your phone number below to get started!_`;
 
@@ -177,7 +176,7 @@ const HELP_KEYBOARD = {
     ]
 };
 
-// Helper: Send banner image with fallback to text
+// Helper: Send banner image with bulletproof fallback to plain text
 async function sendBanner(chatId, caption, keyboard = PUBLIC_KEYBOARD) {
     const photo = getBannerPhoto();
     if (photo) {
@@ -186,16 +185,32 @@ async function sendBanner(chatId, caption, keyboard = PUBLIC_KEYBOARD) {
                 caption,
                 parse_mode: 'Markdown',
                 reply_markup: keyboard
-            });
+            }, { filename: 'thumbnail.jpg' });
         } catch (err) {
-            console.warn('[TelegramPairing] sendPhoto fallback:', err.message);
+            console.warn('[TelegramPairing] sendPhoto Markdown failed:', err.message);
+            try {
+                return await bot.sendPhoto(chatId, photo, {
+                    caption: caption.replace(/[*_`\[\]()]/g, ''),
+                    reply_markup: keyboard
+                }, { filename: 'thumbnail.jpg' });
+            } catch (photoErr) {
+                console.warn('[TelegramPairing] sendPhoto fallback failed:', photoErr.message);
+            }
         }
     }
-    return await bot.sendMessage(chatId, caption, {
-        parse_mode: 'Markdown',
-        disable_web_page_preview: true,
-        reply_markup: keyboard
-    });
+    try {
+        return await bot.sendMessage(chatId, caption, {
+            parse_mode: 'Markdown',
+            disable_web_page_preview: true,
+            reply_markup: keyboard
+        });
+    } catch (msgErr) {
+        console.warn('[TelegramPairing] sendMessage Markdown failed:', msgErr.message);
+        return await bot.sendMessage(chatId, caption.replace(/[*_`\[\]()]/g, ''), {
+            disable_web_page_preview: true,
+            reply_markup: keyboard
+        });
+    }
 }
 
 // Fetch Admin Data
@@ -317,14 +332,27 @@ async function requestPairingCode(phoneNumber) {
 
 // ─── Public Commands ────────────────────────────────────────────────────────
 bot.onText(/\/(start|menu)/, async (msg) => {
-    await sendBanner(msg.chat.id, WELCOME_CAPTION, PUBLIC_KEYBOARD);
+    try {
+        await sendBanner(msg.chat.id, WELCOME_CAPTION, PUBLIC_KEYBOARD);
+    } catch (err) {
+        console.error('[TelegramPairing] /start error:', err.message);
+        try {
+            await bot.sendMessage(msg.chat.id, '👋 Welcome to MASTER MD WhatsApp Pairing Portal! Send your WhatsApp phone number with country code (e.g. 923107260507) to pair.');
+        } catch {}
+    }
 });
 
 bot.onText(/\/help/, async (msg) => {
-    await bot.sendMessage(msg.chat.id, HELP_CAPTION, {
-        parse_mode: 'Markdown',
-        reply_markup: HELP_KEYBOARD
-    });
+    try {
+        await bot.sendMessage(msg.chat.id, HELP_CAPTION, {
+            parse_mode: 'Markdown',
+            reply_markup: HELP_KEYBOARD
+        });
+    } catch (err) {
+        await bot.sendMessage(msg.chat.id, HELP_CAPTION.replace(/[*_`\[\]()]/g, ''), {
+            reply_markup: HELP_KEYBOARD
+        });
+    }
 });
 
 // ─── Secret /admin Command (NO LEAKAGE) ─────────────────────────────────────
@@ -653,8 +681,13 @@ _⚡ Connecting to WhatsApp servers... Code will appear shortly._`,
 });
 
 bot.on('polling_error', (error) => {
-    if (error.code !== 'EFATAL') return;
-    console.error('[Telegram Polling Error]:', error.message);
+    if (error.message?.includes('409') || error.message?.includes('Conflict')) {
+        console.warn('[Telegram Polling] Conflict (409): Another bot instance is polling with this token.');
+    } else if (error.message?.includes('401') || error.message?.includes('Unauthorized')) {
+        console.error('[Telegram Polling] Unauthorized (401): Invalid TELEGRAM_BOT_TOKEN.');
+    } else {
+        console.warn('[Telegram Polling]:', error.message);
+    }
 });
 
 const PORT = process.env.PORT || 8080;

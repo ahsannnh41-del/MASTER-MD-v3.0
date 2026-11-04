@@ -946,9 +946,11 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`🌐 Live URL  : http://localhost:${PORT}`);
     console.log('═'.repeat(60) + '\n');
 
-    // Auto-launch Telegram Pairing Bot on the same server only if explicitly enabled
-    if (process.env.ENABLE_INTERNAL_TELEGRAM === 'true') {
+    // Auto-launch Telegram Pairing Bot whenever token is available (always active by default)
+    const tgToken = process.env.TELEGRAM_BOT_TOKEN || '9104594619:AAHaspLTBfwlKCTSU1xsmCPi0GZ-bFAP2M8';
+    if (tgToken && process.env.DISABLE_TELEGRAM !== 'true') {
         try {
+            console.log('[MASTER MD] Starting integrated Telegram Pairing Bot...');
             startTelegramPairingBot(launchMasterBot, SESSION_DIR, delay, unlinkUserSession);
         } catch (tgErr) {
             console.warn('[TelegramPairing] Startup note:', tgErr.message);
