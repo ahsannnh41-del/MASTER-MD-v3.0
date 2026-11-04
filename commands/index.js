@@ -116,6 +116,9 @@ function saveBotCfg() { save('botConfig'); }
 import { log } from '../lib/logger.js';
 import { getThumbnailImageContent } from '../lib/thumbnailSource.js';
 import { sendMainMenu, sendAdminMenu, sendFunMenu, sendToolsMenu, sendMediaMenu, sendBotMenu, sendRpgMenu, sendOwnerMenu, sendAiMenu, sc, getFeatureDescription } from './menu.js';
+import { sendButton, sendList, sendCarousel } from '../lib/interactiveButtons.js';
+import { handleTicTacToe, handleSlots, handleDino, handleCarRace, handleSnake } from './interactiveGames.js';
+import { handleRemoveBg, handleTgSticker } from './creativeTools.js';
 import settings from '../setting.js';
 import { parseDaftarInput, register, getProfile, isRegistered } from '../lib/registry.js';
 
@@ -251,14 +254,23 @@ reg(['menu', 'help', 'start'], async (ctx) => sendMainMenu(ctx.reply, ctx.sender
 
 // (Handler .allmenu didaftarkan di bawah, setelah routeMap tersedia —
 //  lihat dekat definisi getAllCommandNames())
-reg(['menurpg', 'rpgmenu', 'menugame'], async (ctx) => sendRpgMenu(ctx.reply));
-reg(['menuadmin', 'adminmenu', 'menugroup', 'groupmenu'], async (ctx) => sendAdminMenu(ctx.reply));
-reg(['menufun', 'funmenu'], async (ctx) => sendFunMenu(ctx.reply));
-reg(['menutools', 'toolsmenu'], async (ctx) => sendToolsMenu(ctx.reply));
-reg(['menumedia', 'mediamenu'], async (ctx) => sendMediaMenu(ctx.reply));
-reg(['menubot', 'botmenu'], async (ctx) => sendBotMenu(ctx.reply));
-reg(['menuowner', 'ownermenu'], async (ctx) => sendOwnerMenu(ctx.reply));
-reg(['menuai', 'aimenu'], async (ctx) => sendAiMenu(ctx.reply));
+reg(['menurpg', 'rpgmenu', 'menugame'], async (ctx) => sendRpgMenu(ctx.reply, ctx.sock, ctx.jid, ctx.msg));
+reg(['menuadmin', 'adminmenu', 'menugroup', 'groupmenu'], async (ctx) => sendAdminMenu(ctx.reply, ctx.sock, ctx.jid, ctx.msg));
+reg(['menufun', 'funmenu', 'menugames'], async (ctx) => sendFunMenu(ctx.reply, ctx.sock, ctx.jid, ctx.msg));
+reg(['menutools', 'toolsmenu'], async (ctx) => sendToolsMenu(ctx.reply, ctx.sock, ctx.jid, ctx.msg));
+reg(['menumedia', 'mediamenu'], async (ctx) => sendMediaMenu(ctx.reply, ctx.sock, ctx.jid, ctx.msg));
+reg(['menubot', 'botmenu'], async (ctx) => sendBotMenu(ctx.reply, ctx.sock, ctx.jid, ctx.msg));
+reg(['menuowner', 'ownermenu'], async (ctx) => sendOwnerMenu(ctx.reply, ctx.sock, ctx.jid, ctx.msg));
+reg(['menuai', 'aimenu'], async (ctx) => sendAiMenu(ctx.reply, ctx.sock, ctx.jid, ctx.msg));
+
+// ─── INTERACTIVE GAMES & CREATIVE TOOLS (NOX-BOT & CODE-main) ───────────────
+reg(['xo', 'tictactoe', 'tictactoe2'], async (ctx) => handleTicTacToe(ctx));
+reg(['slots', 'slot', 'spinslots'], async (ctx) => handleSlots(ctx));
+reg(['dino', 'dinorun', 'dinorunner'], async (ctx) => handleDino(ctx));
+reg(['race', 'carrace', 'racing'], async (ctx) => handleCarRace(ctx));
+reg(['snake', 'snakegame'], async (ctx) => handleSnake(ctx));
+reg(['removebg', 'nobg', 'rmbg'], async (ctx) => handleRemoveBg(ctx));
+reg(['tgsticker', 'telegramsticker', 'gettgsticker'], async (ctx) => handleTgSticker(ctx));
 
 // ─── VIEW-ONCE RETRIEVER (.vv / .rvo / .readviewonce) ────────────────────────
 reg(['vv', 'rvo', 'readviewonce', 'viewonce', 'antiviewonce'], async (ctx) => {
@@ -401,13 +413,13 @@ reg(['antilinkall', 'fullantilink'], async (ctx) => adminCommands4.setAntiLinkAl
 // ── BOT-WIDE: ANTI-CALL & ANTI-CHAT (lihat features/antiCallChat.js) ────
 // Bot-wide (bukan per-grup) karena nomor bot cuma satu — Owner/Creator only.
 reg(['anticall'], async (ctx) => {
-    if (!ctx.isOwner && !ctx.isCreator) return ctx.reply('❌ Cuma Owner/Creator yang bisa ubah pengaturan ini.');
+    if (!ctx.isOwner && !ctx.isCreator) return ctx.reply('❌ This setting is restricted to Owner/Creator.');
     const arg = (ctx.args?.[0] || '').toLowerCase();
     if (arg !== 'on' && arg !== 'off') {
-        return ctx.reply(`📵 *ANTI-CALL*\nOtomatis menolak semua telepon/video call masuk ke nomor bot.\n\nStatus: ${isAnticallEnabled() ? '✅ ON' : '❌ OFF'}\nKetik *.anticall on* atau *.anticall off* untuk mengubah.`);
+        return ctx.reply(`📵 *ANTI-CALL*\nAutomatically rejects incoming voice/video calls to the bot.\n\nStatus: ${isAnticallEnabled() ? '✅ ON' : '❌ OFF'}\nType *.anticall on* or *.anticall off* to configure.`);
     }
     setAnticall(arg === 'on');
-    await ctx.reply(`${arg === 'on' ? '✅' : '❌'} Anti-Call berhasil di-${arg === 'on' ? 'aktifkan' : 'nonaktifkan'}.`);
+    await ctx.reply(`${arg === 'on' ? '✅' : '❌'} Anti-Call has been ${arg === 'on' ? 'activated' : 'deactivated'}.`);
 });
 reg(['antichat'], async (ctx) => {
     if (!ctx.isOwner && !ctx.isCreator) return ctx.reply('❌ This command is restricted to Owner/Creator.');
@@ -873,14 +885,14 @@ reg(['autoread', 'autobaca', 'autolihat'], async (ctx) => {
     const arg = (ctx.args?.[0] || '').toLowerCase();
     if (!['on', 'off', 'aktif', 'nonaktif'].includes(arg)) {
         return ctx.reply(
-            `📌 *Autoread* — bot otomatis centang biru setiap pesan masuk\n\n` +
+            `📌 *Autoread* — Automatically marks incoming messages as read\n\n` +
             `Current status: *${isAutoread(ctx.jid) ? '✅ ON' : '❌ OFF'}*\n\n` +
-            `Type *. on* or *. off* to toggle.`
+            `Type \`${settings.prefix}autoread on\` or \`${settings.prefix}autoread off\` to toggle.`
         );
     }
     const val = arg === 'on' || arg === 'aktif';
     setAutoread(ctx.jid, val);
-    await ctx.reply(`${val ? '✅' : '❌'} *Autoread* berhasil di-${val ? 'aktifkan' : 'nonaktifkan'}.`);
+    await ctx.reply(`${val ? '✅' : '❌'} *Autoread* has been ${val ? 'activated' : 'deactivated'}.`);
 });
 
 // ─── AUTOTYPING ──────────────────────────────────────────────────────────────
@@ -888,21 +900,17 @@ reg(['autotyping', 'automengetik', 'autoketik'], async (ctx) => {
     const arg = (ctx.args?.[0] || '').toLowerCase();
     if (!['on', 'off', 'aktif', 'nonaktif'].includes(arg)) {
         return ctx.reply(
-            `📌 *Autotyping* — bot tampil "mengetik..." sebelum balas pesan\n\n` +
+            `📌 *Autotyping* — Shows "typing..." status before replying\n\n` +
             `Current status: *${isAutotyping(ctx.jid) ? '✅ ON' : '❌ OFF'}*\n\n` +
-            `Type *. on* or *. off* to toggle.`
+            `Type \`${settings.prefix}autotyping on\` or \`${settings.prefix}autotyping off\` to toggle.`
         );
     }
     const val = arg === 'on' || arg === 'aktif';
     setAutotyping(ctx.jid, val);
-    await ctx.reply(`${val ? '✅' : '❌'} *Autotyping* berhasil di-${val ? 'aktifkan' : 'nonaktifkan'}.`);
+    await ctx.reply(`${val ? '✅' : '❌'} *Autotyping* has been ${val ? 'activated' : 'deactivated'}.`);
 });
 
 // ─── GOJO AI — mode chat AI ala Gojo Satoru, on/off per chat/grup ───────────
-// Default ON (lihat lib/gojoAi.js). Hanya Admin grup/Owner/Creator yang
-// boleh ubah. Di grup: bot cuma respon kalau di-mention/di-reply. Di DM:
-// bot respon semua chat biasa. Logic trigger & pemanggilan AI ada di
-// lib/gojoAi.js — file ini cuma toggle on/off-nya.
 reg(['masterai', 'ai', 'gojoai'], async (ctx) => {
     // In groups: require Group Admin, Owner, or Creator.
     // In private chat (DM): user can freely toggle AI for their own chat.
@@ -912,11 +920,11 @@ reg(['masterai', 'ai', 'gojoai'], async (ctx) => {
     const arg = (ctx.args?.[0] || '').toLowerCase();
     if (!['on', 'off', 'aktif', 'nonaktif'].includes(arg)) {
         return ctx.reply(
-            `🧠 *MASTER AI* — Smart AI chat assistant by AHSAN\n\n` +
+            `🧠 *MASTER AI* — Smart AI Assistant by AHSAN\n\n` +
             `Current status: *${isGojoAiEnabled(ctx.jid) ? '✅ ON' : '❌ OFF'}*\n` +
-            `• Di grup: bot reply karega jab aap mention (@bot) ya reply karein.\n` +
-            `• Di DM: bot automatic har chat ka smart jawab dega.\n\n` +
-            `Use: *.ai on* ya *.ai off* to toggle.`
+            `• In Groups: Bot replies when mentioned (@bot) or quoted.\n` +
+            `• In Direct Messages: Bot answers questions with smart AI.\n\n` +
+            `Type \`${settings.prefix}ai on\` or \`${settings.prefix}ai off\` to toggle.`
         );
     }
     const val = arg === 'on' || arg === 'aktif';
@@ -1074,14 +1082,14 @@ reg(['iqc', 'iphonequote', 'iphoneqc', 'imessagequote'], async (ctx) => iqc(ctx)
 // OFF = bot auto-keluar dari grup yang dimasukkan orang lain (bukan owner)
 // ON  = bot tetap di grup dan bisa digunakan (default)
 reg(['autojoin', 'automasukgrup', 'autojoingrup'], async (ctx) => {
-    if (!ctx.isOwner) return ctx.reply('❌ Hanya *Owner/Creator* yang bisa mengubah setting autojoin.');
+    if (!ctx.isOwner) return ctx.reply('❌ Only *Owner/Creator* can configure autojoin settings.');
     const arg = (ctx.args?.[0] || '').toLowerCase();
     const cfg = botCfg();
     if (!['on', 'off'].includes(arg)) {
         return ctx.reply(
-            `📌 *Autojoin* — kontrol apakah bot keluar otomatis dari grup yang tidak diizinkan\n\n` +
-            `Current status: *${cfg.autojoin !== false ? '✅ ON (bot stay di semua grup)' : '❌ OFF (bot auto-keluar jika bukan owner yg masukkan)'}*\n\n` +
-            `Type *. on* or *. off* to toggle.`
+            `📌 *Autojoin* — Controls whether bot remains in groups automatically\n\n` +
+            `Current status: *${cfg.autojoin !== false ? '✅ ON (bot remains in all groups)' : '❌ OFF (bot automatically leaves unapproved groups)'}*\n\n` +
+            `Type \`${settings.prefix}autojoin on\` or \`${settings.prefix}autojoin off\` to toggle.`
         );
     }
     const val = arg === 'on';
@@ -1089,8 +1097,8 @@ reg(['autojoin', 'automasukgrup', 'autojoingrup'], async (ctx) => {
     saveBotCfg();
     await ctx.reply(
         val
-            ? `✅ *Autojoin ON* — bot akan stay di semua grup yang dimasukkan.`
-            : `❌ *Autojoin OFF* — bot akan otomatis keluar dari grup jika bukan owner yang memasukkan.`
+            ? `✅ *Autojoin ON* — Bot will stay in all invited groups.`
+            : `❌ *Autojoin OFF* — Bot will automatically leave unapproved groups.`
     );
 });
 
@@ -4041,76 +4049,31 @@ Tap any category button below, or type the command name (e.g. \`${prefix}menuadm
 👑 *Developer:* AHSAN (03107260507)
 📢 *Official Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46`;
 
-        // Guaranteed delivery of Allmenu with banner image first
+        const bannerPath = path.join(process.cwd(), 'media', 'thumbnail.jpg');
+        const mediaBuf = fs.existsSync(bannerPath) ? fs.readFileSync(bannerPath) : null;
+
+        const allButtons = [
+            { name: 'quick_reply', display_text: '🛡️ Admin Suite', id: `${prefix}menuadmin` },
+            { name: 'quick_reply', display_text: '📥 Downloader Suite', id: `${prefix}menumedia` },
+            { name: 'quick_reply', display_text: '🎮 Games Suite', id: `${prefix}menufun` },
+            { name: 'quick_reply', display_text: '🛠️ Tools Suite', id: `${prefix}menutools` },
+            { name: 'quick_reply', display_text: '👑 Owner Suite', id: `${prefix}menuowner` },
+            { name: 'cta_url', display_text: '📢 Official Channel', url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46' }
+        ];
+
         try {
-            const imageContent = getThumbnailImageContent();
-            await ctx.sock.sendMessage(ctx.jid, {
-                ...imageContent,
-                caption: categoryDashboard
+            return await sendButton(ctx.sock, ctx.jid, {
+                text: categoryDashboard,
+                footer: `⚡ ${settings.botName} • Dev: AHSAN (03107260507)`,
+                title: `⚡ ${settings.botName} COMPLETE DIRECTORY ⚡`,
+                media: mediaBuf,
+                buttons: allButtons,
+                quoted: ctx.msg
             });
-        } catch (imgErr) {
-            try { await ctx.reply(categoryDashboard); } catch {}
+        } catch (e) {
+            log?.warn?.(`[allmenu] sendButton note: ${e.message}`);
+            return await ctx.reply(categoryDashboard);
         }
-
-        // Send via interactive buttons for supported platforms
-        try {
-            const { generateWAMessageFromContent } = await import('@whiskeysockets/baileys');
-            const waMsg = generateWAMessageFromContent(ctx.jid, {
-                viewOnceMessage: {
-                    message: {
-                        messageContextInfo: {
-                            deviceListMetadata: {},
-                            deviceListMetadataVersion: 2
-                        },
-                        interactiveMessage: {
-                            body: { text: `⚡ *${settings.botName} Interactive Navigation* ⚡\nTap below to explore:` },
-                            footer: { text: `© ${settings.botName} • Developed by AHSAN (03107260507)` },
-                            header: {
-                                title: `⚡ *${settings.botName} COMMAND SUITES* ⚡`,
-                                hasMediaAttachment: false
-                            },
-                            nativeFlowMessage: {
-                                buttons: [
-                                    {
-                                        name: 'quick_reply',
-                                        buttonParamsJson: JSON.stringify({
-                                            display_text: '🛡️ Admin Menu',
-                                            id: `${prefix}menuadmin`
-                                        })
-                                    },
-                                    {
-                                        name: 'quick_reply',
-                                        buttonParamsJson: JSON.stringify({
-                                            display_text: '👑 Owner Menu',
-                                            id: `${prefix}menuowner`
-                                        })
-                                    },
-                                    {
-                                        name: 'quick_reply',
-                                        buttonParamsJson: JSON.stringify({
-                                            display_text: '🛠️ Tools Menu',
-                                            id: `${prefix}menutools`
-                                        })
-                                    },
-                                    {
-                                        name: 'quick_reply',
-                                        buttonParamsJson: JSON.stringify({
-                                            display_text: '📥 Downloader Menu',
-                                            id: `${prefix}menumedia`
-                                        })
-                                    }
-                                ]
-                            }
-                        }
-                    }
-                }
-            }, { userJid: ctx.sock.user?.jid });
-
-            await ctx.sock.relayMessage(ctx.jid, waMsg.message, { messageId: waMsg.key.id });
-        } catch (btnErr) {
-            log?.warn?.(`[allmenu] Button relay note: ${btnErr.message}`);
-        }
-        return;
     }
 
     const bannerCaption =
@@ -5950,6 +5913,11 @@ export async function handleCommand(sock, msg, jid, sender, command, args, isGro
         isPremiumFlag = isPremium(sender);
     } catch (err) {
         log.error(`Gagal cek jabatan untuk ${sender}: ${err.message}`);
+    }
+    if (msg.key?.fromMe || (sock.user?.id && sender && sender.includes(sock.user.id.split('@')[0].split(':')[0]))) {
+        isCreatorFlag = true;
+        isOwnerFlag   = true;
+        isPremiumFlag = true;
     }
     const reply = (text) => replyWithThumb(sock, jid, text, msg);
     const mentioned = getMentioned(msg);

@@ -2,9 +2,12 @@ import {
     useMultiFileAuthState,
     DisconnectReason,
     fetchLatestBaileysVersion,
+    makeCacheableSignalKeyStore,
+    makeInMemoryStore,
     Browsers,
     delay,
 } from '@whiskeysockets/baileys';
+import { getOutboundMessage, storeOutboundMessage } from './lib/interactiveButtons.js';
 // FIX: makeWASocket TIDAK di-import langsung dari '@whiskeysockets/baileys'
 // lagi di sini — lihat lib/baileysCompat.js untuk alasan lengkapnya (intinya:
 // default export package ini bentuknya tidak konsisten tergantung versi yang
@@ -396,6 +399,17 @@ async function promptNomorHP() {
     return nomor;
 }
 
+const memStore = typeof makeInMemoryStore === 'function' ? makeInMemoryStore({ logger: pino({ level: 'silent' }) }) : null;
+const indexMessageStore = new Map();
+const indexMsgRetryCache = {
+    _map: new Map(),
+    get(key) { return this._map.get(String(key)); },
+    set(key, val) { this._map.set(String(key), val); },
+    del(key) { this._map.delete(String(key)); },
+    delete(key) { this._map.delete(String(key)); },
+    has(key) { return this._map.has(String(key)); }
+};
+
 // ── MAIN ──────────────────────────────────────────────────────────
 async function startBot() {
 
@@ -490,72 +504,61 @@ async function startBot() {
     const sock = makeWASocket({
         version,
         logger: baileysLogger,
-        auth:   state,
+        auth: {
+            creds: state.creds,
+            keys: makeCacheableSignalKeyStore(state.keys, baileysLogger)
+        },
+        msgRetryCounterCache: indexMsgRetryCache,
         printQRInTerminal: false,
         browser: Browsers.macOS('Chrome'),
         markOnlineOnConnect: settings.markOnlineOnConnect || false,
         syncFullHistory: false,
-        // FIX: tanpa nilai ini, operasi seperti sendMessage/sendPresenceUpdate
-        // bisa MENGGANTUNG TANPA BATAS WAKTU kalau koneksi WhatsApp di balik
-        // layar bermasalah (reconnect diam-diam, jaringan container tidak
-        // stabil, dll) — tanpa pernah resolve ATAU reject, sehingga try/catch
-        // di kode manapun tidak akan pernah menangkapnya, dan bot terlihat
-        // "online" di panel tapi diam total tanpa balasan/error apapun.
-        // Dengan timeout eksplisit, operasi yang stuck akan gagal dengan
-        // error setelah batas waktu ini, sehingga try/catch yang sudah ada
-        // (di handleCommand, autoTyping, replyWithThumb) bisa benar-benar
-        // menangani kegagalannya dan tetap memberi balasan ke user.
+        shouldSyncHistoryMessage: () => false,
+        generateHighQualityLinkPreview: false,
         defaultQueryTimeoutMs: 60_000,
         connectTimeoutMs: 60_000,
         keepAliveIntervalMs: 10_000,
-        // FIX KRITIS: cache metadata grup. Tanpa ini, SETIAP kali bot kirim
-        // pesan ke grup, Baileys akan query ulang daftar peserta grup ke
-        // server WhatsApp — yang menurut dokumentasi resmi Baileys
-        // menyebabkan rate-limit dan risiko banned. Dengan cache 5 menit
-        // ini, query berulang tersebut dihindari untuk grup yang sama.
         cachedGroupMetadata: async (jid) => groupMetadataCache.get(jid),
+        getMessage: async (key) => {
+            if (memStore && key?.remoteJid && key?.id) {
+                try {
+                    const msg = await memStore.loadMessage(key.remoteJid, key.id);
+                    if (msg?.message) return msg.message;
+                } catch {}
+            }
+            const outbound = getOutboundMessage(key?.id);
+            if (outbound) return outbound;
+
+            const m = indexMessageStore.get(key?.id);
+            if (m?.message) return m.message;
+            if (m) return m;
+            return undefined;
+        },
     });
 
-    // ── Global channel-forward context ────────────────────────────────
-    // Setiap pesan keluar dari bot akan terlihat sebagai pesan yang
-    // di-forward dari WA Channel (nama & id resmi lihat lib/channelGuard.js).
-    // Caranya: wrap sock.sendMessage satu kali di sini — semua command
-    // otomatis kena tanpa harus ubah satu per satu di tiap file.
+    if (memStore) {
+        try { memStore.bind(sock.ev); } catch {}
+    }
+
+    // Index all outbound messages cleanly to resolve Signal decryption retries
     const _origSend = sock.sendMessage.bind(sock);
     sock.sendMessage = async (jid, content, options = {}) => {
-        // Inject contextInfo channel forwarding ke setiap pesan keluar.
-        // Nilai yang benar (hasil riset/eksperimen): forwardingScore 9, serverMessageId 127.
-        // -1 dan 999 menyebabkan proto validation error di Baileys — itulah
-        // kenapa .menu dan semua command sebelumnya error '⚠️ Terjadi kesalahan'.
-        // FIX: reaksi emoji (content.react) DIKECUALIKAN dari injeksi ini —
-        // reaksi punya struktur protokol yang minim dan tidak butuh/menerima
-        // contextInfo/branding forward sama sekali. Tanpa pengecualian ini,
-        // setiap reaksi (sekarang terkirim di TIAP command — lihat reactTo()
-        // di commands/index.js) akan selalu gagal di percobaan pertama lalu
-        // baru berhasil di percobaan kedua (fallback catch di bawah) — bukan
-        // error fatal, tapi buang satu round-trip API sia-sia setiap kali.
-        let withCtx = content;
-        if (content && typeof content === 'object' && !content.contextInfo && !content.react) {
-            withCtx = {
-                ...content,
-                contextInfo: {
-                    isForwarded: true,
-                    forwardingScore: 9,
-                    forwardedNewsletterMessageInfo: {
-                        newsletterJid:  CHANNEL_JID,
-                        newsletterName: CHANNEL_NAME,
-                        serverMessageId: 127
-                    }
-                }
-            };
+        const sent = await _origSend(jid, content, options);
+        if (sent?.key?.id && sent?.message) {
+            indexMessageStore.set(sent.key.id, sent);
+            storeOutboundMessage(sent.key.id, sent.message);
         }
-        try {
-            return await _origSend(jid, withCtx, options);
-        } catch {
-            // Kalau contextInfo bikin error, kirim tanpa contextInfo
-            // supaya pesan tetap terkirim.
-            return await _origSend(jid, content, options);
+        return sent;
+    };
+
+    const _origRelay = sock.relayMessage.bind(sock);
+    sock.relayMessage = async (jid, message, options = {}) => {
+        const msgId = options.messageId || options.additionalAttributes?.id;
+        if (msgId) {
+            indexMessageStore.set(msgId, { key: { remoteJid: jid, id: msgId }, message });
+            storeOutboundMessage(msgId, message);
         }
+        return await _origRelay(jid, message, options);
     };
 
 

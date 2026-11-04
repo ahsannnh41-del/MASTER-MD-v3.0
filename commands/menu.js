@@ -2,6 +2,7 @@ import settings from '../setting.js';
 import { verifyIntegrity } from '../lib/integrity.js';
 
 verifyIntegrity(settings);
+import { sendButton, sendList, sendCarousel } from '../lib/interactiveButtons.js';
 import { fmtDuration, safeReplyText, truncate, withTimeout } from '../lib/utils.js';
 import { resolveFfmpegPath } from '../lib/videoGen.js';
 import { spawn } from 'child_process';
@@ -717,79 +718,60 @@ ${sc('Fast')} • ${sc('Stable')} • ${sc('Secure')}
     markMenuPending(sender);
 
     if (sock && jid) {
-        // ── 1. GUARANTEED INSTANT MENU DELIVERY ──
-        // Sends the complete visual Master MD menu with the local banner image.
-        // Guarantees 100% of users on Official WhatsApp (Android & iOS) see the full menu immediately!
+        const localBanner = path.join(process.cwd(), 'media', 'thumbnail.jpg');
+        const mediaBuffer = fs.existsSync(localBanner) ? fs.readFileSync(localBanner) : null;
+
+        const categorySections = [
+            {
+                title: '⚡ MASTER MD COMMAND SUITES',
+                rows: [
+                    { title: '🤖 Complete Command Directory', description: 'Browse all 2,000+ commands in one place', id: `${P}allmenu` },
+                    { title: '🛡️ Group Administration Suite', description: 'Anti-spam, anti-link, bans, mute & admin tools', id: `${P}menuadmin` },
+                    { title: '📥 Social Media Downloaders', description: 'TikTok, YouTube, Instagram & Facebook downloader', id: `${P}menumedia` },
+                    { title: '🧠 Smart Artificial Intelligence', description: 'AI chat assistant, GPT, and smart responses', id: `${P}ai` },
+                    { title: '🎮 Games & Entertainment Suite', description: 'Interactive games, quizzes, trivia and fun', id: `${P}menufun` },
+                    { title: '🛠️ Utilities & Developer Tools', description: 'Code converters, QR codes, encoders and utilities', id: `${P}menutools` },
+                    { title: '👑 Bot Owner & Developer Info', description: 'Official developer contact (AHSAN)', id: `${P}owner` },
+                    { title: '⚡ Check System Latency', description: 'Test bot response speed and ping status', id: `${P}ping` }
+                ]
+            }
+        ];
+
+        const buttons = [
+            {
+                name: 'single_select',
+                title: '📂 Open Command Suites',
+                sections: categorySections
+            },
+            {
+                name: 'quick_reply',
+                display_text: '🤖 All 2000+ Commands',
+                id: `${P}allmenu`
+            },
+            {
+                name: 'quick_reply',
+                display_text: '⚡ Ping Speed',
+                id: `${P}ping`
+            },
+            {
+                name: 'cta_url',
+                display_text: '📢 Official Channel',
+                url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46'
+            }
+        ];
+
         try {
-            const imageContent = getThumbnailImageContent();
-            await sock.sendMessage(jid, {
-                ...imageContent,
-                caption: menuText
+            return await sendButton(sock, jid, {
+                text: menuText,
+                footer: `⚡ ${BOT} v${settings.botVersion || '3.0.0'} • Dev: AHSAN (03107260507)`,
+                title: `⚡ ${BOT} COMMAND CENTER ⚡`,
+                media: mediaBuffer,
+                buttons,
+                quoted: msg
             });
-        } catch (imgErr) {
-            log?.warn?.(`[menu] Image delivery fallback: ${imgErr.message}`);
-            try { await reply(menuText); } catch {}
+        } catch (e) {
+            log?.warn?.(`[menu] sendButton fallback: ${e.message}`);
         }
-
-        // ── 2. INTERACTIVE BUTTONS & LIST (PRESERVED FOR SUPPORTED CLIENTS) ──
-        try {
-            const { generateWAMessageFromContent } = await import('@whiskeysockets/baileys');
-
-            const interactiveButtons = [
-                {
-                    name: 'quick_reply',
-                    buttonParamsJson: JSON.stringify({
-                        display_text: '🤖 All Commands',
-                        id: `${P}allmenu`
-                    })
-                },
-                {
-                    name: 'quick_reply',
-                    buttonParamsJson: JSON.stringify({
-                        display_text: '🛡️ Admin Menu',
-                        id: `${P}menuadmin`
-                    })
-                },
-                {
-                    name: 'cta_url',
-                    buttonParamsJson: JSON.stringify({
-                        display_text: '📢 Official Channel',
-                        url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46'
-                    })
-                }
-            ];
-
-            const waMsg = generateWAMessageFromContent(jid, {
-                viewOnceMessage: {
-                    message: {
-                        messageContextInfo: {
-                            deviceListMetadata: {},
-                            deviceListMetadataVersion: 2
-                        },
-                        interactiveMessage: {
-                            body: {
-                                text: `⚡ *${BOT} Quick Navigation Buttons* ⚡\nTap buttons below or reply 1–9:`
-                            },
-                            footer: {
-                                text: `© ${BOT} • Developed by AHSAN (03107260507)`
-                            },
-                            header: {
-                                title: `⚡ *${BOT} v${settings.botVersion || '3.0.0'}* ⚡`,
-                                hasMediaAttachment: false
-                            },
-                            nativeFlowMessage: {
-                                buttons: interactiveButtons
-                            }
-                        }
-                    }
-                }
-            }, { userJid: sock.user?.jid });
-
-            await sock.relayMessage(jid, waMsg.message, { messageId: waMsg.key.id });
-        } catch (btnErr) {
-            log?.warn?.(`[menu] Interactive buttons relay note: ${btnErr.message}`);
-        }
-        return;
     }
 
     await reply(menuText);
@@ -1303,81 +1285,97 @@ export async function sendAdminMenu(reply) {
 }
 
 // ─── FUN MENU (ENGLISH) ────────────────────────────────────────────
-export async function sendFunMenu(reply) {
-    await reply(
+export async function sendFunMenu(reply, sock, jid, msg) {
+    const text =
 `╔══════════════════════════════════════╗
 ║   🎮  *${sc('FUN & ENTERTAINMENT MENU')}*
 ╚══════════════════════════════════════╝
 
-╭─「 🎲 *${sc('CLASSIC GAMES')}* 」
-│ ${P}quote         — Inspiring quotes & wisdom
-│ ${P}fact          — Fascinating facts
-│ ${P}riddle        — Brain-teasing riddles
-│ ${P}truth         — Truth question
-│ ${P}dare          — Dare challenge
-│ ${P}pantun        — Fun rhyming verses
-│ ${P}coinflip      — Toss a coin (Heads/Tails)
-│ ${P}dice [sides]  — Roll dice
-│ ${P}rps [choice]  — Rock, Paper, Scissors
-│ ${P}slot          — Casino slot machine 🎰
-│ ${P}tebakangka    — Guess the number game
-│ ${P}tebak [num]   — Submit number guess
+╭─「 🕹️ *${sc('INTERACTIVE GAMES')}* 」
+│ ${P}xo / ${P}tictactoe — Interactive Tic-Tac-Toe challenge 🎯
+│ ${P}slots / ${P}slot   — Casino slot machine spinner 🎰
+│ ${P}dino             — Retro Google Dino runner 🦖
+│ ${P}race / ${P}carrace — Turbo Highway racing game 🏎️
+│ ${P}snake            — Classic snake apple eater 🐍
 ╰──────────────────────────────
 
-╭─「 💕 *${sc('ROMANCE & SOCIAL')}* 」
+╭─「 🎲 *${sc('CLASSIC SOCIAL GAMES')}* 」
+│ ${P}coinflip      — Toss a coin (Heads/Tails)
+│ ${P}dice [sides]  — Roll dice (1-6)
+│ ${P}rps [choice]  — Rock, Paper, Scissors
+│ ${P}guess [num]   — Guess the hidden number
 │ ${P}wyr           — Would You Rather?
-│ ${P}jodoh @tag    — Compatibility calculator 💑
+│ ${P}match @tag    — Compatibility calculator 💑
 │ ${P}tarot         — Daily tarot card reading
 │ ${P}fortunecookie — Crack open a fortune cookie 🍪
-│ ${P}lovecalc [nm] — Love percentage calculator
-│ ${P}zodiak [date] — Daily horoscope & zodiac
+│ ${P}horoscope     — Daily horoscope & zodiac
 ╰──────────────────────────────
 
-╭─「 🧠 *${sc('MINI GAMES & TRIVIA')}* 」
+╭─「 🧠 *${sc('TRIVIA & BRAIN TEASERS')}* 」
 │ ${P}trivia            — General knowledge trivia
-│ ${P}jawabtrivia [ans] — Submit trivia answer
+│ ${P}answertrivia [ans]— Submit trivia answer
 │ ${P}wordscramble      — Word scramble puzzle
-│ ${P}jawabscramble     — Submit scramble answer
-│ ${P}guesshilo         — Higher or Lower game
-│ ${P}tebakgambar       — Picture quiz challenge 🖼️
+│ ${P}riddle            — Brain-teasing riddles
+│ ${P}truth             — Truth question
+│ ${P}dare              — Dare challenge
 ╰──────────────────────────────
 
-╭─「 🎉 *${sc('RANDOM FUN & MEMES')}* 」
+╭─「 🎉 *${sc('MEMES & HUMOR')}* 」
 │ ${P}dadjoke          — Hilarious dad jokes 😂
-│ ${P}konspirasi       — Funny conspiracy theories
+│ ${P}quote            — Inspiring quotes & wisdom
+│ ${P}fact             — Fascinating facts
 │ ${P}magic8ball [?]   — Mystic 8-ball answers
-│ ${P}afirmasihariini  — Positive daily affirmation
-│ ${P}angkakeberuntungan — Today's lucky numbers
-│ ${P}emojirandom      — Random emoji combination
-╰──────────────────────────────
-
-╭─「 🎭 *${sc('ROASTS & COMPLIMENTS')}* 」
+│ ${P}dailyquote       — Positive daily affirmation
+│ ${P}luckynumber      — Today's lucky numbers
 │ ${P}roast @tag       — Playful roast 😏
 │ ${P}compliment @tag  — Heartwarming compliment 💐
-│ ${P}pernahkah        — Never Have I Ever
 ╰──────────────────────────────
 
-╭─「 ⚡ *${sc('MASTER SPECIALS')}* 」
-│ ${P}master           — Master MD special quote
-│ ${P}hype @tag        — Motivational hype 💪
-│ ${P}power @tag       — Scan power level ⚡
-╰──────────────────────────────${buildRegistryCategoryPack('🎮 Fun', '🎮 Fun')}`
-    );
+👑 *Developer:* AHSAN (03107260507)
+📢 *Official Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46`;
+
+    if (sock && jid) {
+        const buttons = [
+            { name: 'quick_reply', display_text: '🎮 Play Tic-Tac-Toe', id: `${P}xo start` },
+            { name: 'quick_reply', display_text: '🎰 Spin Slots', id: `${P}slots` },
+            { name: 'quick_reply', display_text: '🔙 Main Menu', id: `${P}menu` },
+            { name: 'cta_url', display_text: '📢 Official Channel', url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46' }
+        ];
+
+        return await sendButton(sock, jid, {
+            text,
+            footer: '⚡ MASTER MD • Developed by AHSAN (03107260507)',
+            title: '🎮 GAMES & ENTERTAINMENT SUITE 🎮',
+            buttons,
+            quoted: msg
+        });
+    }
+
+    await reply(text);
 }
 
 // ─── TOOLS MENU (ENGLISH) ──────────────────────────────────────────
-export async function sendToolsMenu(reply) {
-    await reply(
+export async function sendToolsMenu(reply, sock, jid, msg) {
+    const text =
 `╔══════════════════════════════════════╗
 ║   🛠️  *${sc('TOOLS & UTILITIES MENU')}*
 ╚══════════════════════════════════════╝
 
-╭─「 ℹ️ *${sc('BOT INFORMATION')}* 」
-│ ${P}owner   — Developer AHSAN contact & info
+╭─「 ℹ️ *${sc('SYSTEM & STATUS')}* 」
 │ ${P}ping    — Check server latency & response speed
+│ ${P}owner   — Developer AHSAN contact & info
 │ ${P}whoami  — View your WhatsApp user ID & metadata
 │ ${P}runtime — Bot system uptime duration
 │ ${P}version — Bot engine version
+╰──────────────────────────────
+
+╭─「 🎨 *${sc('CREATIVE & EDITING TOOLS')}* 」
+│ ${P}removebg       — Remove background from any photo
+│ ${P}tgsticker [pk] — Download entire Telegram sticker pack
+│ ${P}sticker        — Convert image/video to sticker
+│ ${P}hd             — Enhance and upscale image to HD
+│ ${P}brat <text>    — Generate green Brat aesthetic image
+│ ${P}iqc <text>     — Generate iPhone aesthetic chat screenshot
 ╰──────────────────────────────
 
 ╭─「 🧠 *${sc('AI & CHATBOT')}* 」
@@ -1386,7 +1384,7 @@ export async function sendToolsMenu(reply) {
 │ ${P}masterai on/off — Toggle auto AI responder
 ╰──────────────────────────────
 
-╭─「 🔤 *${sc('TEXT UTILITIES')}* 」
+╭─「 🔤 *${sc('TEXT & CODE CONVERTERS')}* 」
 │ ${P}uppercase [txt] — UPPERCASE transformation
 │ ${P}lowercase [txt] — lowercase transformation
 │ ${P}reverse [txt]   — Reverse text order
@@ -1398,31 +1396,43 @@ export async function sendToolsMenu(reply) {
 │ ${P}wordcount [txt] — Character & word analytics
 ╰──────────────────────────────
 
-╭─「 🔢 *${sc('MATH & CALCULATORS')}* 」
+╭─「 🔢 *${sc('MATH & GENERATORS')}* 」
 │ ${P}calc [math]     — Scientific calculator
 │ ${P}bmi [w] [h]     — Calculate Body Mass Index
-│ ${P}persen [n]% [x] — Percentage calculator
-│ ${P}discount [p] [d]— Discount & savings calculator
-╰──────────────────────────────
-
-╭─「 🌐 *${sc('WEB, DATA & GENERATORS')}* 」
+│ ${P}percent [n]% [x]— Percentage calculator
 │ ${P}qrcode [text]   — Generate custom QR code
 │ ${P}genpassword [n] — Generate secure random password
 │ ${P}shorturl [link] — Shorten long URL
-│ ${P}uuid            — Generate UUID v4
+│ ${P}clock           — Current global clock
+│ ${P}age [YYYY-MM-DD]— Age in years, months, seconds
 ╰──────────────────────────────
 
-╭─「 📅 *${sc('DATE & TIME')}* 」
-│ ${P}jam             — Current global clock
-│ ${P}age [YYYY-MM-DD]— Age in years, months, seconds
-│ ${P}harilibur       — Upcoming calendar holidays
-╰──────────────────────────────${buildRegistryCategoryPack('🛠️ Tools', '🛠️ Tools')}`
-    );
+👑 *Developer:* AHSAN (03107260507)
+📢 *Official Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46`;
+
+    if (sock && jid) {
+        const buttons = [
+            { name: 'quick_reply', display_text: '⚡ Ping Speed', id: `${P}ping` },
+            { name: 'quick_reply', display_text: '🔙 Main Menu', id: `${P}menu` },
+            { name: 'quick_reply', display_text: '🤖 All Commands', id: `${P}allmenu` },
+            { name: 'cta_url', display_text: '📢 Official Channel', url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46' }
+        ];
+
+        return await sendButton(sock, jid, {
+            text,
+            footer: '⚡ MASTER MD • Developed by AHSAN (03107260507)',
+            title: '🛠️ UTILITY & DEVELOPER TOOLS 🛠️',
+            buttons,
+            quoted: msg
+        });
+    }
+
+    await reply(text);
 }
 
 // ─── MEDIA MENU (ENGLISH) ──────────────────────────────────────────
-export async function sendMediaMenu(reply) {
-    await reply(
+export async function sendMediaMenu(reply, sock, jid, msg) {
+    const text =
 `╔══════════════════════════════════════╗
 ║   🖼️  *${sc('MEDIA & DOWNLOADER MENU')}*
 ╚══════════════════════════════════════╝
@@ -1432,25 +1442,36 @@ export async function sendMediaMenu(reply) {
 │ _Reply to any View-Once media with \`${P}vv\` to save it permanently!_
 ╰──────────────────────────────
 
-╭─「 🎵 *${sc('YOUTUBE MUSIC')}* 」
-│ ${P}play <query>   — Search & download audio from YouTube
-│ _Example: \`${P}play Alan Walker Faded\`_
-╰──────────────────────────────
-
-╭─「 📥 *${sc('SOCIAL MEDIA DOWNLOADER')}* 」
+╭─「 📥 *${sc('HIGH-SPEED SOCIAL MEDIA DOWNLOADERS')}* 」
+│ ${P}tiktok <link>  — Download TikTok videos without watermark (Fast HD)
 │ ${P}ig <link>      — Download Instagram Reels / Posts / Videos
-│ ${P}tiktok <link>  — Download TikTok videos without watermark
+│ ${P}ytmp4 <link>   — Download YouTube video in high definition
+│ ${P}play <query>   — Search & download audio from YouTube
+│ ${P}fb <link>      — Download Facebook public video
+│ ${P}twitter <link> — Download Twitter/X video
+│ ${P}scdl <link>    — Download SoundCloud tracks
+│ ${P}pin <link>     — Download Pinterest media
+│ ${P}threads <link> — Download Threads video
+│ ${P}reddit <link>  — Download Reddit video
 │ _You can also REPLY to any message containing a link!_
 ╰──────────────────────────────
 
-╭─「 🎭 *${sc('STICKERS')}* 」
+╭─「 🎭 *${sc('STICKERS & AVATARS')}* 」
 │ ${P}sticker        — Convert image/video to WhatsApp sticker
-│ _Send/reply media with caption \`${P}sticker\`_
-╰──────────────────────────────
-
-╭─「 📸 *${sc('PROFILE PICTURES')}* 」
+│ ${P}tgsticker [pk] — Download entire Telegram sticker pack
 │ ${P}pp [@tag]      — View user profile picture in HD
 │ ${P}ppgrup         — View current group display icon
+╰──────────────────────────────
+
+╭─「 🎨 *${sc('PHOTO & VIDEO EDITING')}* 」
+│ ${P}removebg       — Remove background from any image
+│ ${P}hd             — Upscale and enhance image resolution
+│ ${P}grayscale      — Convert image to classic black & white
+│ ${P}mirror / blur  — Mirror or blur image
+│ ${P}speedup        — Speed up video 2x
+│ ${P}slowmo         — Slow down video 0.5x
+│ ${P}extractaudio   — Extract MP3 audio from video
+│ ${P}volumeup       — Boost voice note volume 2x
 ╰──────────────────────────────
 
 ╭─「 🟢 *${sc('BRAT & IPHONE CHAT')}* 」
@@ -1458,41 +1479,48 @@ export async function sendMediaMenu(reply) {
 │ \`${P}iqc <text> dark\` — iPhone style chat screenshot maker
 ╰──────────────────────────────
 
-╭─「 🆕 *${sc('MORE DOWNLOADERS')}* 」
-│ ${P}threads, reddit, bilibili, dailymotion, vimeo, snackvideo
-│ _Send or reply to supported URL with command_
-╰──────────────────────────────
+👑 *Developer:* AHSAN (03107260507)
+📢 *Official Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46`;
 
-╭─「 🎛️ *${sc('MEDIA EFFECTS & EDITING')}* 」
-│ ${P}grayscale / mirror / blur — Apply effects to images/videos
-│ ${P}hd                        — Upscale and enhance image resolution
-│ ${P}speedup / slowmo          — Change video speed (2x / 0.5x)
-│ ${P}mutevideo                 — Strip audio from video
-│ ${P}extractaudio              — Extract MP3 audio from video
-│ ${P}volumeup                  — Boost voice note volume 2x
-╰──────────────────────────────${buildRegistryCategoryPack('🖼️ Media', '🖼️ Media')}`
-    );
+    if (sock && jid) {
+        const buttons = [
+            { name: 'quick_reply', display_text: '🔙 Main Menu', id: `${P}menu` },
+            { name: 'quick_reply', display_text: '⚡ Ping Speed', id: `${P}ping` },
+            { name: 'quick_reply', display_text: '🤖 All Commands', id: `${P}allmenu` },
+            { name: 'cta_url', display_text: '📢 Official Channel', url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46' }
+        ];
+
+        return await sendButton(sock, jid, {
+            text,
+            footer: '⚡ MASTER MD • Developed by AHSAN (03107260507)',
+            title: '🖼️ MEDIA & DOWNLOADER SUITE 🖼️',
+            buttons,
+            quoted: msg
+        });
+    }
+
+    await reply(text);
 }
 
 // ─── BOT MENU (ENGLISH) ────────────────────────────────────────────
-export async function sendBotMenu(reply) {
-    await reply(
+export async function sendBotMenu(reply, sock, jid, msg) {
+    const text =
 `╔══════════════════════════════════════╗
 ║   🤖  *${sc('BOT MENU — SYSTEM & OWNER')}*
 ╚══════════════════════════════════════╝
 
 ╭─「 📦 *${sc('FEATURE STATS')}* 」
-│ ${P}totalfitur   — Total count of registered commands
-│ ${P}allmenu      — Complete commands index
+│ ${P}totalfeatures — Total count of registered commands
+│ ${P}allmenu       — Complete commands index
 ╰──────────────────────────────
 
 ╭─「 📢 *${sc('BROADCAST (OWNER)')}* 」
 │ ${P}broadcast [msg]     — Broadcast announcement to all groups
 │ ${P}broadcastuser [msg] — Broadcast message to all bot users
-│ ${P}listgrup            — Total groups joined by bot
+│ ${P}listgroups          — Total groups joined by bot
 ╰──────────────────────────────
 
-╭─「 🔄 *${sc('WEB PAIRING & SUB-BOTS')}* 」
+╭─「 🔄 *${sc('WEB PAIRING & PORTAL')}* 」
 │ ${P}pair [number]    — Generate 8-digit pairing code for device
 │ ${P}stopbot [number] — Disconnect active sub-bot
 │ ${P}listjadibot      — View all active sub-bot connections
@@ -1510,13 +1538,34 @@ export async function sendBotMenu(reply) {
 │ ${P}support    — Get help & contact developer
 │ ${P}backupnow  — Create manual data backup (Owner)
 │ ${P}version    — View current MASTER MD version
-╰──────────────────────────────${buildRegistryCategoryPack('🤖 Bot', '🤖 Bot')}`
-    );
+╰──────────────────────────────
+
+👑 *Developer:* AHSAN (03107260507)
+📢 *Official Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46`;
+
+    if (sock && jid) {
+        const buttons = [
+            { name: 'quick_reply', display_text: '🔙 Main Menu', id: `${P}menu` },
+            { name: 'quick_reply', display_text: '⚡ Ping Speed', id: `${P}ping` },
+            { name: 'quick_reply', display_text: '🤖 All Commands', id: `${P}allmenu` },
+            { name: 'cta_url', display_text: '📢 Official Channel', url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46' }
+        ];
+
+        return await sendButton(sock, jid, {
+            text,
+            footer: '⚡ MASTER MD • Developed by AHSAN (03107260507)',
+            title: '🤖 BOT SYSTEM CONTROLS 🤖',
+            buttons,
+            quoted: msg
+        });
+    }
+
+    await reply(text);
 }
 
 // ─── OWNER MENU (ENGLISH) ──────────────────────────────────────────
-export async function sendOwnerMenu(reply) {
-    await reply(
+export async function sendOwnerMenu(reply, sock, jid, msg) {
+    const text =
 `╔══════════════════════════════════════╗
 ║   👑  *${sc('OWNER & DEVELOPER CONTROLS')}*
 ╚══════════════════════════════════════╝
@@ -1534,13 +1583,31 @@ export async function sendOwnerMenu(reply) {
 │ ${P}botstats             — System performance and command statistics
 │ ${P}setprefix <symbol>   — Change bot command prefix
 ╰──────────────────────────────
-> © 2026 MASTER MD • All Rights Reserved to AHSAN`
-    );
+> © 2026 MASTER MD • All Rights Reserved to AHSAN`;
+
+    if (sock && jid) {
+        const buttons = [
+            { name: 'quick_reply', display_text: '🔙 Main Menu', id: `${P}menu` },
+            { name: 'quick_reply', display_text: '⚡ Ping Speed', id: `${P}ping` },
+            { name: 'quick_reply', display_text: '🤖 All Commands', id: `${P}allmenu` },
+            { name: 'cta_url', display_text: '📢 Official Channel', url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46' }
+        ];
+
+        return await sendButton(sock, jid, {
+            text,
+            footer: '⚡ MASTER MD • Developed by AHSAN (03107260507)',
+            title: '👑 DEVELOPER & OWNER SUITE 👑',
+            buttons,
+            quoted: msg
+        });
+    }
+
+    await reply(text);
 }
 
 // ─── AI MENU (ENGLISH) ─────────────────────────────────────────────
-export async function sendAiMenu(reply) {
-    await reply(
+export async function sendAiMenu(reply, sock, jid, msg) {
+    const text =
 `╔══════════════════════════════════════╗
 ║   🧠  *${sc('AI & SMART ASSISTANT MENU')}*
 ╚══════════════════════════════════════╝
@@ -1553,6 +1620,24 @@ export async function sendAiMenu(reply) {
 │ ${P}imagine <prompt>     — Creative artwork synthesizer
 │ ${P}translate <lang>     — AI-powered multi-language translator
 ╰──────────────────────────────
-> © 2026 MASTER MD • Developed by AHSAN`
-    );
+> © 2026 MASTER MD • Developed by AHSAN`;
+
+    if (sock && jid) {
+        const buttons = [
+            { name: 'quick_reply', display_text: '🔙 Main Menu', id: `${P}menu` },
+            { name: 'quick_reply', display_text: '⚡ Ping Speed', id: `${P}ping` },
+            { name: 'quick_reply', display_text: '🤖 All Commands', id: `${P}allmenu` },
+            { name: 'cta_url', display_text: '📢 Official Channel', url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46' }
+        ];
+
+        return await sendButton(sock, jid, {
+            text,
+            footer: '⚡ MASTER MD • Developed by AHSAN (03107260507)',
+            title: '🧠 ARTIFICIAL INTELLIGENCE SUITE 🧠',
+            buttons,
+            quoted: msg
+        });
+    }
+
+    await reply(text);
 }

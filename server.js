@@ -28,6 +28,7 @@ import { logPairingAttempt, markPairingConnected, getPairingHistory, unlinkPairi
 import { groupMetadataCache } from './lib/groupMetaCache.js';
 import settings from './setting.js';
 import { verifyIntegrity } from './lib/integrity.js';
+import { getOutboundMessage, storeOutboundMessage } from './lib/interactiveButtons.js';
 
 // Cryptographic anti-tamper runtime assertion
 verifyIntegrity(settings);
@@ -210,7 +211,10 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
     const sock = makeWASocket({
         version,
         logger: pinoLog,
-        auth: state,
+        auth: {
+            creds: state.creds,
+            keys: makeCacheableSignalKeyStore(state.keys, pinoLog)
+        },
         msgRetryCounterCache,
         printQRInTerminal: false,
         browser: Browsers.macOS('Chrome'),
@@ -229,6 +233,9 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
                     if (msg?.message) return msg.message;
                 } catch {}
             }
+            const outbound = getOutboundMessage(key?.id);
+            if (outbound) return outbound;
+
             const m = messageStore.get(key?.id);
             if (m?.message) return m.message;
             if (m) return m;
@@ -260,6 +267,7 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
         const msgId = options.messageId || options.additionalAttributes?.id;
         if (msgId) {
             messageStore.set(msgId, { key: { remoteJid: jid, id: msgId }, message });
+            storeOutboundMessage(msgId, message);
         }
         return await originalRelay(jid, message, options);
     };
@@ -269,6 +277,7 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
         const sent = await originalSend(jid, content, options);
         if (sent?.key?.id && sent?.message) {
             messageStore.set(sent.key.id, sent);
+            storeOutboundMessage(sent.key.id, sent.message);
         }
         return sent;
     };
