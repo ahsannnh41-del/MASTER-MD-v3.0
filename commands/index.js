@@ -144,10 +144,9 @@ async function replyWithThumb(sock, jid, text, quotedMsg) {
         const recalled = recallRealJid(target);
         if (recalled) target = recalled;
     }
-    const isSelf = !!(quotedMsg?.key?.fromMe || (sock?.user?.id && target && target.includes(sock.user.id.split('@')[0].split(':')[0])));
-    const quoteOption = isSelf ? {} : (quotedMsg ? { quoted: quotedMsg } : {});
     try {
-        return await withTimeout(sock.sendMessage(target || jid, { text }, quoteOption), 30_000, 'sendMessage(plainText)');
+        // Send cleanly without quote to prevent Signal contextInfo ratchet decryption errors ("Waiting for this message")
+        return await withTimeout(sock.sendMessage(target || jid, { text }), 30_000, 'sendMessage(plainText)');
     } catch (err) {
         log.error(`GAGAL kirim pesan ke ${target || jid}: ${err.message}`);
         try {
@@ -905,7 +904,9 @@ reg(['autotyping', 'automengetik', 'autoketik'], async (ctx) => {
 // bot respon semua chat biasa. Logic trigger & pemanggilan AI ada di
 // lib/gojoAi.js — file ini cuma toggle on/off-nya.
 reg(['masterai', 'ai', 'gojoai'], async (ctx) => {
-    if (!ctx.isAdmin && !ctx.isOwner && !ctx.isCreator) {
+    // In groups: require Group Admin, Owner, or Creator.
+    // In private chat (DM): user can freely toggle AI for their own chat.
+    if (ctx.isGroup && !ctx.isAdmin && !ctx.isOwner && !ctx.isCreator) {
         return ctx.reply('❌ Only *Group Admins*, *Owner*, or *Creator* can configure this mode.');
     }
     const arg = (ctx.args?.[0] || '').toLowerCase();
@@ -6027,19 +6028,11 @@ export async function handleCommand(sock, msg, jid, sender, command, args, isGro
         ];
         const timeoutMs = longTimeoutCommands.includes(command) ? 180_000 : 60_000;
         await withTimeout(handler(ctx), timeoutMs, `command "${command}"`);
-        if (!msg?.key?.fromMe) {
-            await reactTo(sock, jid, msg.key, '✅');
-        }
-        // FIX: sebelumnya trackCommandUsage(command) dipanggil 2x di sini secara
-        // tidak sengaja — bikin statistik .botstats (total & per-command) selalu
-        // dobel dari angka sebenarnya. Cukup dipanggil sekali.
+        // Reactions removed to eliminate "Waiting for this message" clock icon bubbles
         try { trackCommandUsage(command); } catch { /* ignore */ }
     } catch (err) {
         log.error(`Command "${command}": ${err.message}`);
         try { await reply('⚠️ An error occurred while executing this command.'); } catch {}
-        if (!msg?.key?.fromMe) {
-            await reactTo(sock, jid, msg.key, '❌');
-        }
     }
 }
 

@@ -21,6 +21,20 @@ const makeWASocket =
 
 export const maxDuration = 60;
 
+function normalizePhoneNumber(raw) {
+    let n = String(raw || '').replace(/[^0-9]/g, '');
+    if (n.startsWith('00')) n = n.slice(2);
+    if (n.startsWith('920') && n.length === 13) n = '92' + n.slice(3);
+    else if (n.startsWith('9203') && n.length >= 13) n = '92' + n.slice(3);
+    else if (n.startsWith('03') && n.length === 11) n = '92' + n.slice(1);
+    else if (n.startsWith('0') && n.length === 11) n = '92' + n.slice(1);
+    else if (n.startsWith('3') && n.length === 10) n = '92' + n;
+    else if (n.startsWith('910') && n.length === 13) n = '91' + n.slice(3);
+    else if (n.startsWith('440') && n.length === 13) n = '44' + n.slice(3);
+    else if (n.startsWith('620') && (n.length === 13 || n.length === 14)) n = '62' + n.slice(3);
+    return n;
+}
+
 export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -43,7 +57,7 @@ export default async function handler(req, res) {
 
     try {
         const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-        let rawNumber = String(body.phoneNumber || '').replace(/[^0-9]/g, '');
+        let rawNumber = normalizePhoneNumber(body.phoneNumber);
 
         if (!rawNumber || rawNumber.length < 10 || rawNumber.length > 15) {
             return res.status(400).json({
@@ -74,7 +88,7 @@ export default async function handler(req, res) {
                     keys: makeCacheableSignalKeyStore(state.keys, pinoLog)
                 },
                 printQRInTerminal: false,
-                browser: Browsers.ubuntu('Chrome'),
+                browser: Browsers.macOS('Chrome'),
                 markOnlineOnConnect: true,
                 syncFullHistory: false,
                 shouldSyncHistoryMessage: () => false,
@@ -128,6 +142,7 @@ export default async function handler(req, res) {
                     const cmd = (rawCmd || '').toLowerCase();
                     const text = args.join(' ');
                     const pushName = m.pushName || 'Friend';
+                    const quoteOpt = m.key?.fromMe ? {} : { quoted: m };
 
                     // 1. .ping / .speed
                     if (cmd === 'ping' || cmd === 'speed') {
@@ -135,7 +150,7 @@ export default async function handler(req, res) {
                         const latency = Math.abs(Date.now() - (m.messageTimestamp * 1000 || start));
                         await sock.sendMessage(from, {
                             text: `⚡ *PONG!* \`\`\`${latency} ms\`\`\`\n\n🤖 *Bot:* MASTER MD\n👑 *Developer:* AHSAN (03107260507)\n⚡ *Status:* Online & Lightning Fast!`
-                        }, { quoted: m }).catch(() => {});
+                        }, quoteOpt).catch(() => {});
                         continue;
                     }
 
@@ -153,7 +168,7 @@ export default async function handler(req, res) {
 `📢 *Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46\n` +
 `⚡ *Speed:* 100% Operational & Active\n\n` +
 `Type *.menu* to view all commands!`
-                        }, { quoted: m }).catch(() => {});
+                        }, quoteOpt).catch(() => {});
                         continue;
                     }
 
@@ -167,7 +182,7 @@ export default async function handler(req, res) {
 `• *WhatsApp:* https://wa.me/923107260507\n` +
 `• *Official Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46\n\n` +
 `> © 2026 MASTER MD • All Rights Reserved to AHSAN`
-                        }, { quoted: m }).catch(() => {});
+                        }, quoteOpt).catch(() => {});
                         continue;
                     }
 
@@ -227,19 +242,19 @@ export default async function handler(req, res) {
 `> © 2026 MASTER MD • All Rights Reserved to AHSAN\n` +
 `> Join Channel: https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46`;
 
-                        await sock.sendMessage(from, { text: menuText }, { quoted: m }).catch(() => {});
+                        await sock.sendMessage(from, { text: menuText }, quoteOpt).catch(() => {});
                         continue;
                     }
 
                     // 5. .ai / .masterai / .gpt
                     if (cmd === 'ai' || cmd === 'masterai' || cmd === 'gpt') {
                         if (!text) {
-                            await sock.sendMessage(from, { text: `⚠️ Please ask a question!\nExample: *${prefix}${cmd} Who created you?*` }, { quoted: m });
+                            await sock.sendMessage(from, { text: `⚠️ Please ask a question!\nExample: *${prefix}${cmd} Who created you?*` }, quoteOpt);
                             continue;
                         }
                         await sock.sendMessage(from, {
                             text: `🤖 *MASTER AI:*\n\nHello *${pushName}*! Regarding "*${text}*":\nI am *MASTER MD*, WhatsApp AI Bot developed by *AHSAN* (03107260507). All systems are running at maximum speed!`
-                        }, { quoted: m });
+                        }, quoteOpt);
                         continue;
                     }
                 }

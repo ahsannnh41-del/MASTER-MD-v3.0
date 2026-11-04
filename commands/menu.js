@@ -717,31 +717,24 @@ ${sc('Fast')} • ${sc('Stable')} • ${sc('Secure')}
     markMenuPending(sender);
 
     if (sock && jid) {
-        const isSelfChat = !!(msg?.key?.fromMe || (sock?.user?.id && jid && jid.includes(sock.user.id.split('@')[0].split(':')[0])));
-        const quoteOption = isSelfChat ? {} : (msg ? { quoted: msg } : {});
-
-        // ── 1. GUARANTEED DUAL DELIVERY: Send Visual Menu with Image First ──
-        // This ensures 100% of users on Official WhatsApp (Android, iOS, Web, Desktop)
-        // receive the full menu immediately without any missing output or blank bubbles.
+        // ── 1. PREPARE HEADER THUMBNAIL MEDIA ──
+        let headerImageMessage = null;
         try {
-            const imageContent = getThumbnailImageContent();
-            await withTimeout(
-                sock.sendMessage(jid, {
-                    ...imageContent,
-                    caption: `${menuText}\n\n👇 _Select an option 1–9, or use the interactive buttons below:_`
-                }, quoteOption),
-                25_000,
-                'sendMessage(menuImage)'
+            const { prepareWAMessageMedia } = await import('@whiskeysockets/baileys');
+            const media = await withTimeout(
+                prepareWAMessageMedia(
+                    getThumbnailImageContent(),
+                    { upload: sock.waUploadToServer }
+                ),
+                30_000,
+                'prepareWAMessageMedia(menuThumbnail)'
             );
-        } catch (imgErr) {
-            log?.warn?.(`[menu] Image delivery fallback to text: ${imgErr.message}`);
-            try {
-                await sock.sendMessage(jid, { text: menuText }, quoteOption);
-            } catch {}
+            headerImageMessage = media?.imageMessage || null;
+        } catch (thumbErr) {
+            log?.warn?.(`[menu] Header thumbnail warning: ${thumbErr.message}`);
         }
 
-        // ── 2. INTERACTIVE BUTTONS & LIST MENU (PRESERVED 100%) ──
-        // Relayed for clients/platforms supporting native flow interactive buttons.
+        // ── 2. INTERACTIVE BUTTONS & LIST MENU (100% ACTIVE) ──
         try {
             const { generateWAMessageFromContent } = await import('@whiskeysockets/baileys');
 
@@ -812,12 +805,16 @@ ${sc('Fast')} • ${sc('Stable')} • ${sc('Secure')}
                         },
                         interactiveMessage: {
                             body: {
-                                text: `⚡ *${BOT} Quick Action Buttons* ⚡\nTap buttons below to navigate quickly, or reply 1–9:`
+                                text: `${menuText}\n\n👇 *Tap buttons below or reply 1–9 to open any suite:*`
                             },
                             footer: {
                                 text: `© ${BOT} • Developed by AHSAN (03107260507)`
                             },
-                            header: {
+                            header: headerImageMessage ? {
+                                title: BOT,
+                                hasMediaAttachment: true,
+                                imageMessage: headerImageMessage
+                            } : {
                                 title: `⚡ *${BOT} v${settings.botVersion || '3.0.0'}* ⚡`,
                                 hasMediaAttachment: false
                             },
@@ -830,10 +827,21 @@ ${sc('Fast')} • ${sc('Stable')} • ${sc('Secure')}
             }, { userJid: sock.user?.jid });
 
             await sock.relayMessage(jid, waMsg.message, { messageId: waMsg.key.id });
+            return;
         } catch (btnErr) {
-            log?.warn?.(`[menu] Interactive buttons relay note: ${btnErr.message}`);
+            log?.warn?.(`[menu] Interactive buttons relay fallback: ${btnErr.message}`);
+            try {
+                const imageContent = getThumbnailImageContent();
+                await sock.sendMessage(jid, {
+                    ...imageContent,
+                    caption: menuText
+                });
+                return;
+            } catch (imgErr) {
+                await reply(menuText);
+                return;
+            }
         }
-        return;
     }
 
     await reply(menuText);
