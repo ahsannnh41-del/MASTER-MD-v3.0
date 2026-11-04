@@ -837,12 +837,6 @@ ${line}
         ];
 
         const messageParamsJson = JSON.stringify({
-            limited_time_offer: {
-                text: 'MASTER MD',
-                url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46',
-                copy_code: 'MASTER-MD',
-                expiration_time: 1754613436864329
-            },
             bottom_sheet: {
                 in_thread_buttons_limit: 1,
                 divider_indices: [1],
@@ -851,7 +845,7 @@ ${line}
             },
             tap_target_configuration: {
                 title: '▸ MASTER MD ◂',
-                description: 'Next-Gen Command Center',
+                description: 'Command Center',
                 canonical_url: settings.channelUrl || 'https://whatsapp.com',
                 domain: 'https://whatsapp.com',
                 button_index: 0
@@ -860,22 +854,27 @@ ${line}
 
         let mediaMessage = null;
         if (sock.waUploadToServer) {
-            try {
-                const videoPath = path.join(process.cwd(), 'media', 'menu.mp4');
-                if (fs.existsSync(videoPath)) {
+            const videoPath = path.join(process.cwd(), 'media', 'menu.mp4');
+            if (fs.existsSync(videoPath)) {
+                try {
                     const videoBuffer = fs.readFileSync(videoPath);
                     mediaMessage = await prepareWAMessageMedia(
                         { video: videoBuffer, gifPlayback: true },
                         { upload: sock.waUploadToServer }
                     );
-                } else if (mediaBuffer) {
+                } catch (vErr) {
+                    console.warn('[menu] video prep warning, falling back to image:', vErr.message);
+                }
+            }
+            if (!mediaMessage && mediaBuffer) {
+                try {
                     mediaMessage = await prepareWAMessageMedia(
                         { image: mediaBuffer },
                         { upload: sock.waUploadToServer }
                     );
+                } catch (iErr) {
+                    console.warn('[menu] image prep warning:', iErr.message);
                 }
-            } catch (mediaErr) {
-                console.warn('[menu] prepareWAMessageMedia error:', mediaErr.message);
             }
         }
 
@@ -917,6 +916,10 @@ ${line}
             const msgObj = generateWAMessageFromContent(jid, {
                 viewOnceMessage: {
                     message: {
+                        messageContextInfo: {
+                            deviceListMetadata: {},
+                            deviceListMetadataVersion: 2
+                        },
                         interactiveMessage
                     }
                 }
@@ -929,7 +932,31 @@ ${line}
                 storeOutboundMessage(msgObj.key.id, msgObj.message);
             }
 
-            await sock.relayMessage(jid, msgObj.message, { messageId: msgObj.key.id });
+            const additionalNodes = [
+                {
+                    tag: 'biz',
+                    attrs: {},
+                    content: [
+                        {
+                            tag: 'interactive',
+                            attrs: { type: 'native_flow', v: '1' },
+                            content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }]
+                        }
+                    ]
+                }
+            ];
+
+            if (!jid.endsWith('@g.us')) {
+                additionalNodes.unshift({
+                    tag: 'bot',
+                    attrs: { biz_bot: '1' }
+                });
+            }
+
+            await sock.relayMessage(jid, msgObj.message, {
+                messageId: msgObj.key.id,
+                additionalNodes
+            });
             return msgObj;
         } catch (relayError) {
             console.warn('[menu] relayMessage failed, sending fallback image message:', relayError.message);
@@ -937,10 +964,18 @@ ${line}
 
         // Bulletproof Fallback: ALWAYS SEND BANNER IMAGE WITH CAPTION
         if (mediaBuffer) {
-            return await sock.sendMessage(jid, {
-                image: mediaBuffer,
-                caption: menuText
-            }, { quoted: quoteObj });
+            if (menuText.length > 1000) {
+                try {
+                    await sock.sendMessage(jid, { image: mediaBuffer, caption: '⚡ MASTER MD COMMAND CENTER ⚡\nDeveloped by AHSAN (03107260507)' }, { quoted: quoteObj });
+                    return await reply(menuText);
+                } catch {}
+            }
+            try {
+                return await sock.sendMessage(jid, {
+                    image: mediaBuffer,
+                    caption: menuText
+                }, { quoted: quoteObj });
+            } catch {}
         }
     }
 

@@ -4088,12 +4088,6 @@ Tap any category button below, or type the command name (e.g. \`${prefix}menuadm
             });
         } catch (e) {
             log?.warn?.(`[allmenu] sendButton note: ${e.message}`);
-            if (mediaBuf) {
-                return await ctx.sock.sendMessage(ctx.jid, {
-                    image: mediaBuf,
-                    caption: categoryDashboard
-                }, { quoted: ctx.msg });
-            }
             return await ctx.reply(categoryDashboard);
         }
     }
