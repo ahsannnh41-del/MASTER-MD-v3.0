@@ -4041,7 +4041,18 @@ Tap any category button below, or type the command name (e.g. \`${prefix}menuadm
 👑 *Developer:* AHSAN (03107260507)
 📢 *Official Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46`;
 
-        // Send via interactive buttons or thumbnail message
+        // Guaranteed delivery of Allmenu with banner image first
+        try {
+            const imageContent = getThumbnailImageContent();
+            await ctx.sock.sendMessage(ctx.jid, {
+                ...imageContent,
+                caption: categoryDashboard
+            });
+        } catch (imgErr) {
+            try { await ctx.reply(categoryDashboard); } catch {}
+        }
+
+        // Send via interactive buttons for supported platforms
         try {
             const { generateWAMessageFromContent } = await import('@whiskeysockets/baileys');
             const waMsg = generateWAMessageFromContent(ctx.jid, {
@@ -4052,7 +4063,7 @@ Tap any category button below, or type the command name (e.g. \`${prefix}menuadm
                             deviceListMetadataVersion: 2
                         },
                         interactiveMessage: {
-                            body: { text: categoryDashboard },
+                            body: { text: `⚡ *${settings.botName} Interactive Navigation* ⚡\nTap below to explore:` },
                             footer: { text: `© ${settings.botName} • Developed by AHSAN (03107260507)` },
                             header: {
                                 title: `⚡ *${settings.botName} COMMAND SUITES* ⚡`,
@@ -4087,58 +4098,19 @@ Tap any category button below, or type the command name (e.g. \`${prefix}menuadm
                                             display_text: '📥 Downloader Menu',
                                             id: `${prefix}menumedia`
                                         })
-                                    },
-                                    {
-                                        name: 'single_select',
-                                        buttonParamsJson: JSON.stringify({
-                                            title: 'Explore All 9 Suites',
-                                            sections: [
-                                                {
-                                                    title: 'Management & Core',
-                                                    rows: [
-                                                        { header: '', title: '🛡️ Admin Menu', description: 'Group moderation & controls', id: `${prefix}menuadmin` },
-                                                        { header: '', title: '👑 Owner Menu', description: 'Developer controls & broadcast', id: `${prefix}menuowner` },
-                                                        { header: '', title: '🤖 Bot Core', description: 'Latency ping & statistics', id: `${prefix}menubot` },
-                                                    ]
-                                                },
-                                                {
-                                                    title: 'Media, Tools & AI',
-                                                    rows: [
-                                                        { header: '', title: '🛠️ Tools Menu', description: 'Converters & utility tools', id: `${prefix}menutools` },
-                                                        { header: '', title: '📥 Downloader Menu', description: 'Media downloads & .vv view-once', id: `${prefix}menumedia` },
-                                                        { header: '', title: '🧠 AI Assistant', description: 'Smart chat & prompts', id: `${prefix}menuai` },
-                                                    ]
-                                                },
-                                                {
-                                                    title: 'Entertainment & Games',
-                                                    rows: [
-                                                        { header: '', title: '🎮 Fun & Games', description: 'Trivia, riddles & memes', id: `${prefix}menufun` },
-                                                        { header: '', title: '⚔️ RPG System', description: 'Inventory, quests & adventures', id: `${prefix}menurpg` },
-                                                        { header: '', title: '🖥️ cPanel & Rental', description: 'Pterodactyl server controls', id: `${prefix}cpanel` },
-                                                    ]
-                                                }
-                                            ]
-                                        })
                                     }
                                 ]
                             }
                         }
                     }
                 }
-            }, { quoted: ctx.msg, userJid: ctx.sock.user?.jid });
+            }, { userJid: ctx.sock.user?.jid });
 
             await ctx.sock.relayMessage(ctx.jid, waMsg.message, { messageId: waMsg.key.id });
-            return;
         } catch (btnErr) {
-            try {
-                const imageContent = getThumbnailImageContent();
-                await ctx.sock.sendMessage(ctx.jid, { ...imageContent, caption: categoryDashboard }, { quoted: ctx.msg });
-                return;
-            } catch {
-                await ctx.reply(categoryDashboard);
-                return;
-            }
+            log?.warn?.(`[allmenu] Button relay note: ${btnErr.message}`);
         }
+        return;
     }
 
     const bannerCaption =

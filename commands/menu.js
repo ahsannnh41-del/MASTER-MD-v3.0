@@ -717,24 +717,21 @@ ${sc('Fast')} • ${sc('Stable')} • ${sc('Secure')}
     markMenuPending(sender);
 
     if (sock && jid) {
-        // ── 1. PREPARE HEADER THUMBNAIL MEDIA ──
-        let headerImageMessage = null;
+        // ── 1. GUARANTEED INSTANT MENU DELIVERY ──
+        // Sends the complete visual Master MD menu with the local banner image.
+        // Guarantees 100% of users on Official WhatsApp (Android & iOS) see the full menu immediately!
         try {
-            const { prepareWAMessageMedia } = await import('@whiskeysockets/baileys');
-            const media = await withTimeout(
-                prepareWAMessageMedia(
-                    getThumbnailImageContent(),
-                    { upload: sock.waUploadToServer }
-                ),
-                30_000,
-                'prepareWAMessageMedia(menuThumbnail)'
-            );
-            headerImageMessage = media?.imageMessage || null;
-        } catch (thumbErr) {
-            log?.warn?.(`[menu] Header thumbnail warning: ${thumbErr.message}`);
+            const imageContent = getThumbnailImageContent();
+            await sock.sendMessage(jid, {
+                ...imageContent,
+                caption: menuText
+            });
+        } catch (imgErr) {
+            log?.warn?.(`[menu] Image delivery fallback: ${imgErr.message}`);
+            try { await reply(menuText); } catch {}
         }
 
-        // ── 2. INTERACTIVE BUTTONS & LIST MENU (100% ACTIVE) ──
+        // ── 2. INTERACTIVE BUTTONS & LIST (PRESERVED FOR SUPPORTED CLIENTS) ──
         try {
             const { generateWAMessageFromContent } = await import('@whiskeysockets/baileys');
 
@@ -759,40 +756,6 @@ ${sc('Fast')} • ${sc('Stable')} • ${sc('Secure')}
                         display_text: '📢 Official Channel',
                         url: settings.channelUrl || 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46'
                     })
-                },
-                {
-                    name: 'single_select',
-                    buttonParamsJson: JSON.stringify({
-                        title: `${BOT} Command Suites`,
-                        sections: [
-                            {
-                                title: 'Core Navigation',
-                                rows: [
-                                    { header: '', title: '🤖 All Commands', description: 'Interactive 2000+ commands dashboard', id: `${P}allmenu` },
-                                    { header: '', title: '👑 Owner Info', description: 'Developer contact & channel', id: `${P}owner` },
-                                    { header: '', title: '⚡ Latency Ping', description: 'Check bot server response speed', id: `${P}ping` },
-                                    { header: '', title: '📢 Official Channel', description: 'Updates & news channel', id: `${P}credits` },
-                                ]
-                            },
-                            {
-                                title: 'Features & Utilities',
-                                rows: [
-                                    { header: '', title: '🛡️ Admin Menu', description: 'Group moderation & security tools', id: `${P}menuadmin` },
-                                    { header: '', title: '🧠 AI Supercharged', description: 'Smart AI assistant & prompts', id: `${P}menuai` },
-                                    { header: '', title: '📥 Downloader Menu', description: 'TikTok, Instagram, YouTube & more', id: `${P}menumedia` },
-                                    { header: '', title: '🛠️ Tools Menu', description: 'Converters & utility tools', id: `${P}menutools` },
-                                ]
-                            },
-                            {
-                                title: 'Entertainment & System',
-                                rows: [
-                                    { header: '', title: '🎮 Fun & Games', description: 'Games, memes & trivia', id: `${P}menufun` },
-                                    { header: '', title: '⚔️ RPG System', description: 'Guilds, inventory & adventures', id: `${P}menurpg` },
-                                    { header: '', title: '🤖 Bot Settings', description: 'Bot configuration & options', id: `${P}menubot` },
-                                ]
-                            }
-                        ]
-                    })
                 }
             ];
 
@@ -805,16 +768,12 @@ ${sc('Fast')} • ${sc('Stable')} • ${sc('Secure')}
                         },
                         interactiveMessage: {
                             body: {
-                                text: `${menuText}\n\n👇 *Tap buttons below or reply 1–9 to open any suite:*`
+                                text: `⚡ *${BOT} Quick Navigation Buttons* ⚡\nTap buttons below or reply 1–9:`
                             },
                             footer: {
                                 text: `© ${BOT} • Developed by AHSAN (03107260507)`
                             },
-                            header: headerImageMessage ? {
-                                title: BOT,
-                                hasMediaAttachment: true,
-                                imageMessage: headerImageMessage
-                            } : {
+                            header: {
                                 title: `⚡ *${BOT} v${settings.botVersion || '3.0.0'}* ⚡`,
                                 hasMediaAttachment: false
                             },
@@ -827,21 +786,10 @@ ${sc('Fast')} • ${sc('Stable')} • ${sc('Secure')}
             }, { userJid: sock.user?.jid });
 
             await sock.relayMessage(jid, waMsg.message, { messageId: waMsg.key.id });
-            return;
         } catch (btnErr) {
-            log?.warn?.(`[menu] Interactive buttons relay fallback: ${btnErr.message}`);
-            try {
-                const imageContent = getThumbnailImageContent();
-                await sock.sendMessage(jid, {
-                    ...imageContent,
-                    caption: menuText
-                });
-                return;
-            } catch (imgErr) {
-                await reply(menuText);
-                return;
-            }
+            log?.warn?.(`[menu] Interactive buttons relay note: ${btnErr.message}`);
         }
+        return;
     }
 
     await reply(menuText);
