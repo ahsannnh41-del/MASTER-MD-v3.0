@@ -143,13 +143,11 @@ async function replyWithThumb(sock, jid, text, quotedMsg) {
     if (target && target.includes('@lid')) {
         const recalled = recallRealJid(target);
         if (recalled) target = recalled;
-        else if (quotedMsg?.key?.fromMe && sock?.user?.id) {
-            const num = sock.user.id.split('@')[0].split(':')[0];
-            if (num) target = `${num}@s.whatsapp.net`;
-        }
     }
+    const isSelf = !!(quotedMsg?.key?.fromMe || (sock?.user?.id && target && target.includes(sock.user.id.split('@')[0].split(':')[0])));
+    const quoteOption = isSelf ? {} : (quotedMsg ? { quoted: quotedMsg } : {});
     try {
-        return await withTimeout(sock.sendMessage(target || jid, { text }, { quoted: quotedMsg }), 30_000, 'sendMessage(plainText)');
+        return await withTimeout(sock.sendMessage(target || jid, { text }, quoteOption), 30_000, 'sendMessage(plainText)');
     } catch (err) {
         log.error(`GAGAL kirim pesan ke ${target || jid}: ${err.message}`);
         try {
@@ -186,6 +184,14 @@ export async function replyWithImage(sock, jid, quotedMsg, imageUrl, text) {
         ? `${truncate(full, SAFE_CAPTION_LIMIT)}\n\n👇 _Full details arriving in next message..._`
         : full;
 
+    let target = jid;
+    if (target && target.includes('@lid')) {
+        const recalled = recallRealJid(target);
+        if (recalled) target = recalled;
+    }
+    const isSelf = !!(quotedMsg?.key?.fromMe || (sock?.user?.id && target && target.includes(sock.user.id.split('@')[0].split(':')[0])));
+    const quoteOption = isSelf ? {} : (quotedMsg ? { quoted: quotedMsg } : {});
+
     if (imageUrl) {
         try {
             // FIX (2026-08-06): pakai file thumbnail lokal (media/thumbnail.*)
@@ -199,20 +205,20 @@ export async function replyWithImage(sock, jid, quotedMsg, imageUrl, text) {
                 ? getThumbnailImageContent()
                 : { image: { url: imageUrl } };
             await withTimeout(
-                sock.sendMessage(jid, { ...imageContent, caption }, { quoted: quotedMsg }),
+                sock.sendMessage(target || jid, { ...imageContent, caption }, quoteOption),
                 30_000,
                 'sendMessage(image)'
             );
             if (tooLongForCaption) {
-                await replyWithThumb(sock, jid, full, quotedMsg);
+                await replyWithThumb(sock, target || jid, full, quotedMsg);
             }
             return;
         } catch (err) {
-            log.error(`Gagal kirim gambar thumbnail ke ${jid}: ${err.message}`);
+            log.error(`Gagal kirim gambar thumbnail ke ${target || jid}: ${err.message}`);
             // lanjut ke fallback teks biasa di bawah
         }
     }
-    await replyWithThumb(sock, jid, full, quotedMsg);
+    await replyWithThumb(sock, target || jid, full, quotedMsg);
 }
 
 function getMentioned(msg) {
@@ -6021,7 +6027,9 @@ export async function handleCommand(sock, msg, jid, sender, command, args, isGro
         ];
         const timeoutMs = longTimeoutCommands.includes(command) ? 180_000 : 60_000;
         await withTimeout(handler(ctx), timeoutMs, `command "${command}"`);
-        await reactTo(sock, jid, msg.key, '✅');
+        if (!msg?.key?.fromMe) {
+            await reactTo(sock, jid, msg.key, '✅');
+        }
         // FIX: sebelumnya trackCommandUsage(command) dipanggil 2x di sini secara
         // tidak sengaja — bikin statistik .botstats (total & per-command) selalu
         // dobel dari angka sebenarnya. Cukup dipanggil sekali.
@@ -6029,7 +6037,9 @@ export async function handleCommand(sock, msg, jid, sender, command, args, isGro
     } catch (err) {
         log.error(`Command "${command}": ${err.message}`);
         try { await reply('⚠️ An error occurred while executing this command.'); } catch {}
-        await reactTo(sock, jid, msg.key, '❌');
+        if (!msg?.key?.fromMe) {
+            await reactTo(sock, jid, msg.key, '❌');
+        }
     }
 }
 
