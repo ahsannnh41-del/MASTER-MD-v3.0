@@ -213,7 +213,7 @@ async function launchMasterBot(customDir = SESSION_DIR, rawNumber = '', onPairin
         auth: state,
         msgRetryCounterCache,
         printQRInTerminal: false,
-        browser: Browsers.macOS('Desktop'),
+        browser: Browsers.macOS('Chrome'),
         markOnlineOnConnect: true,
         syncFullHistory: false,
         shouldSyncHistoryMessage: () => false,
@@ -457,6 +457,7 @@ app.post('/api/pair', async (req, res) => {
         }
 
         const sessionId = crypto.randomBytes(6).toString('hex');
+        const pairSessionDir = path.join(os.tmpdir(), `master_md_${sessionId}`);
         sessions.set(sessionId, { status: 'initializing', phoneNumber: rawNumber });
 
         // Cancel any pending reconnect timers
@@ -465,45 +466,10 @@ app.post('/api/pair', async (req, res) => {
             botReconnectTimer = null;
         }
 
-        // Clean stale unauthenticated session before fresh pairing to avoid Connection Closed
-        let isRegistered = false;
-        try {
-            const credsPath = path.join(SESSION_DIR, 'creds.json');
-            if (fs.existsSync(credsPath)) {
-                const credsData = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
-                isRegistered = !!credsData.registered;
-            }
-        } catch {}
-
-        if (!isRegistered) {
-            // Terminate existing active socket cleanly before purging unauthenticated cache
-            if (globalActiveSock) {
-                try {
-                    globalActiveSock.ev.removeAllListeners();
-                    globalActiveSock.end();
-                } catch {}
-                globalActiveSock = null;
-                await delay(200);
-            }
-
-            try {
-                if (fs.existsSync(SESSION_DIR)) {
-                    const files = fs.readdirSync(SESSION_DIR);
-                    for (const f of files) {
-                        if (f !== 'pairing_history.json') {
-                            fs.rmSync(path.join(SESSION_DIR, f), { recursive: true, force: true });
-                        }
-                    }
-                }
-            } catch (e) {
-                console.warn('Clean session warning:', e.message);
-            }
-        }
-
         let activeSock = null;
         let lastQrString = null;
 
-        await launchMasterBot(SESSION_DIR, rawNumber, (sock) => {
+        await launchMasterBot(pairSessionDir, rawNumber, (sock) => {
             activeSock = sock;
             const current = sessions.get(sessionId) || {};
             sessions.set(sessionId, { ...current, status: 'handshaking', sock, phoneNumber: rawNumber });
@@ -519,13 +485,22 @@ app.post('/api/pair', async (req, res) => {
                 }
                 if (update.connection === 'open') {
                     sessions.set(sessionId, { ...cur, status: 'connected', sock, phoneNumber: rawNumber });
+                    // Permanently sync authenticated credentials to root SESSION_DIR
+                    try {
+                        if (fs.existsSync(pairSessionDir)) {
+                            fs.cpSync(pairSessionDir, SESSION_DIR, { recursive: true, force: true });
+                            console.log(`✅ [Pairing Success] Credentials permanently stored in ${SESSION_DIR}`);
+                        }
+                    } catch (e) {
+                        console.warn('[Sync to SESSION_DIR warning]:', e.message);
+                    }
                 }
             });
         });
 
         // Fast & resilient pairing code request:
-        // Wait 3.5 seconds for socket connection to establish, then request pairing code directly
-        await delay(3500);
+        // Wait 4.5 seconds for socket connection & WhatsApp Noise handshake to fully establish
+        await delay(4500);
 
         let pairingCode = null;
         for (let attempt = 1; attempt <= 4; attempt++) {
