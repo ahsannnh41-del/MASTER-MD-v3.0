@@ -38,6 +38,8 @@ import pino from 'pino'
 
 import Pino from 'pino'
 
+import qrcode from 'qrcode'
+
 import path, { join, dirname } from 'path'
 
 import { Boom } from '@hapi/boom'
@@ -282,6 +284,16 @@ maxIdleTimeMs: 60000,
 
 global.conn = makeWASocket(connectionOptions)
 
+// Capture QR code on initial connection
+global.conn.ev.on('connection.update', async (update) => {
+    if (update.qr) {
+        global.rawQR = update.qr
+        try {
+            global.qrDataURL = await qrcode.toDataURL(update.qr, { scale: 8, margin: 2 })
+        } catch (e) {}
+    }
+})
+
 // Universal Robust Pairing Code Generator for Web, Telegram, and CLI
 global.requestPairingCode = async function(rawNumber) {
     const cleanNumber = String(rawNumber || '').replace(/[^0-9]/g, '')
@@ -289,13 +301,9 @@ global.requestPairingCode = async function(rawNumber) {
         throw new Error('Invalid phone number! Please enter 10 to 15 digits including country code (e.g. 923107260507).')
     }
 
-    if (global.conn?.authState?.creds?.registered) {
-        throw new Error('MASTER MD is already linked and connected to WhatsApp!')
-    }
-
     console.log(chalk.cyan(`\n⚡ [ MASTER MD Pairing ] Generating fresh pairing handshake for: +${cleanNumber}...`))
 
-    // 1. Close existing socket if alive and not registered
+    // 1. Close existing socket if alive
     if (global.conn) {
         try {
             global.conn.ev.removeAllListeners()
@@ -303,14 +311,16 @@ global.requestPairingCode = async function(rawNumber) {
         } catch (e) {}
     }
 
-    // 2. Clean up un-registered session files to ensure pristine key exchange
+    // 2. Clean up previous session files to ensure pristine key exchange
     const sessionDir = path.join(__dirname, global.sessions || 'Sessions/Principal')
     if (fs.existsSync(sessionDir)) {
         try {
             fs.rmSync(sessionDir, { recursive: true, force: true })
-            console.log(chalk.yellow('[ MASTER MD Pairing ] Cleaned previous un-registered session state.'))
+            console.log(chalk.yellow('[ MASTER MD Pairing ] Cleaned session state for fresh pairing.'))
         } catch (e) {}
     }
+    global.qrDataURL = null
+    global.rawQR = null
 
     // 3. Initialize fresh multi-file auth state
     const { state: freshState, saveCreds: freshSaveCreds } = await useMultiFileAuthState(global.sessions || 'Sessions/Principal')
@@ -348,7 +358,13 @@ global.requestPairingCode = async function(rawNumber) {
 
     // 6. Monitor connection opening
     sock.ev.on('connection.update', async (update) => {
-        const { connection } = update
+        const { connection, qr } = update
+        if (qr) {
+            global.rawQR = qr
+            try {
+                global.qrDataURL = await qrcode.toDataURL(qr, { scale: 8, margin: 2 })
+            } catch (e) {}
+        }
         if (connection === 'open') {
             console.log(chalk.bold.greenBright(`\n🎉 [ MASTER MD ] WhatsApp Linked Successfully with: +${cleanNumber}!`))
             try {
@@ -398,10 +414,66 @@ global.requestPairingCode = async function(rawNumber) {
     return formatted
 }
 
-global.resetSession = async function() {
-    if (global.conn?.authState?.creds?.registered) {
-        throw new Error('Cannot reset an active registered session. Please logout from WhatsApp on your phone first.')
+global.getOrGenerateQR = async function() {
+    if (global.conn?.user?.id && global.conn?.ws?.readyState === 1) {
+        return { isConnected: true, user: global.conn.user.id.split(':')[0] }
     }
+
+    if (global.qrDataURL) {
+        return { isConnected: false, qr: global.qrDataURL }
+    }
+
+    if (!global.conn || global.conn.ws?.readyState !== 1) {
+        await global.resetSession()
+        const { state: qrState, saveCreds: qrSaveCreds } = await useMultiFileAuthState(global.sessions || 'Sessions/Principal')
+        const qrOptions = {
+            logger: pino({ level: 'silent' }),
+            printQRInTerminal: false,
+            mobile: false,
+            browser: Browsers ? Browsers.ubuntu('Chrome') : ['Ubuntu', 'Chrome', '20.0.04'],
+            auth: {
+                creds: qrState.creds,
+                keys: makeCacheableSignalKeyStore(qrState.keys, pino({ level: 'silent' }))
+            },
+            markOnlineOnConnect: false,
+            generateHighQualityLinkPreview: true,
+            syncFullHistory: false,
+            shouldSyncHistoryMessage: () => false,
+            version: global.waVersion || [2, 3000, 1037641644],
+            keepAliveIntervalMs: 30000,
+            maxIdleTimeMs: 60000,
+        }
+        const sock = makeWASocket(qrOptions)
+        global.conn = sock
+        sock.ev.on('creds.update', qrSaveCreds)
+        sock.ev.on('connection.update', async (update) => {
+            const { qr, connection } = update
+            if (qr) {
+                global.rawQR = qr
+                try {
+                    global.qrDataURL = await qrcode.toDataURL(qr, { scale: 8, margin: 2 })
+                } catch (e) {}
+            }
+            if (connection === 'open') {
+                if (typeof global.reloadHandler === 'function') {
+                    await global.reloadHandler(false).catch(console.error)
+                }
+            }
+        })
+    }
+
+    for (let i = 0; i < 8; i++) {
+        if (global.qrDataURL) break
+        await new Promise(r => setTimeout(r, 500))
+    }
+
+    return {
+        isConnected: !!(global.conn?.user?.id && global.conn?.ws?.readyState === 1),
+        qr: global.qrDataURL || null
+    }
+}
+
+global.resetSession = async function() {
     if (global.conn) {
         try {
             global.conn.ev.removeAllListeners()
@@ -414,7 +486,9 @@ global.resetSession = async function() {
             fs.rmSync(sessionDir, { recursive: true, force: true })
         } catch (e) {}
     }
-    console.log(chalk.yellow('[ MASTER MD ] Unregistered session state cleared.'))
+    global.qrDataURL = null
+    global.rawQR = null
+    console.log(chalk.yellow('[ MASTER MD ] Session state completely cleared.'))
     return true
 }
 

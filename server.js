@@ -56,24 +56,40 @@ app.get('/health', (req, res) => {
 // Bot connection status
 app.get('/api/status', (req, res) => {
     const isConnReady = !!global.conn
-    const isRegistered = !!global.conn?.authState?.creds?.registered
+    const isActuallyOnline = !!(global.conn?.user?.id && global.conn?.ws?.readyState === 1)
     const user = global.conn?.user || null
 
     res.json({
         success: true,
         isConnReady,
-        isRegistered,
+        isRegistered: isActuallyOnline,
         user,
         botName: 'MASTER MD v3.0.0',
         developer: 'AHSAN (03107260507)',
-        status: isRegistered ? 'connected' : 'waiting_for_pairing'
+        status: isActuallyOnline ? 'connected' : 'waiting_for_pairing'
     })
+})
+
+// Live QR code endpoint
+app.get('/api/qr', async (req, res) => {
+    try {
+        if (typeof global.getOrGenerateQR === 'function') {
+            const qrResult = await global.getOrGenerateQR()
+            return res.json({ success: true, ...qrResult })
+        }
+        if (global.qrDataURL) {
+            return res.json({ success: true, qr: global.qrDataURL, isConnected: false })
+        }
+        return res.json({ success: false, message: 'QR Code is generating... please wait 2-3 seconds.' })
+    } catch (e) {
+        return res.status(500).json({ success: false, message: e.message })
+    }
 })
 
 // Request 8-digit pairing code via web
 app.post('/api/pair', async (req, res) => {
     try {
-        const { phoneNumber } = req.body || {}
+        const { phoneNumber, force } = req.body || {}
         const cleanNumber = normalizePhoneNumber(phoneNumber)
 
         if (!cleanNumber || cleanNumber.length < 10 || cleanNumber.length > 15) {
@@ -83,17 +99,20 @@ app.post('/api/pair', async (req, res) => {
             })
         }
 
+        const isActuallyOnline = !!(global.conn?.user?.id && global.conn?.ws?.readyState === 1)
+        if (isActuallyOnline && !force) {
+            return res.json({
+                success: false,
+                alreadyConnected: true,
+                user: global.conn.user.id.split(':')[0],
+                message: 'MASTER MD is already online and connected as +' + global.conn.user.id.split(':')[0] + '. Click "Force Re-Pair" below if you want to link a new number.'
+            })
+        }
+
         // Wait up to 5 seconds if bot engine is still loading
         for (let wait = 0; wait < 10; wait++) {
             if (typeof global.requestPairingCode === 'function' || global.conn) break
             await new Promise(r => setTimeout(r, 500))
-        }
-
-        if (global.conn?.authState?.creds?.registered) {
-            return res.json({
-                success: false,
-                message: 'MASTER MD is already linked and connected to WhatsApp! If you wish to re-pair, please logout first.'
-            })
         }
 
         console.log(`[Web Pairing] Initiating clean pairing flow for: +${cleanNumber}`)
@@ -131,19 +150,19 @@ app.post('/api/pair', async (req, res) => {
     }
 })
 
-// Reset un-registered session to allow fresh pairing code handshake
+// Reset session to allow fresh pairing code or QR handshake
 app.post('/api/reset', async (req, res) => {
     try {
         if (typeof global.resetSession === 'function') {
             await global.resetSession()
         } else {
             const sessionPath = path.join(__dirname, global.sessions || 'Sessions/Principal')
-            if (fs.existsSync(sessionPath) && !global.conn?.authState?.creds?.registered) {
+            if (fs.existsSync(sessionPath)) {
                 fs.rmSync(sessionPath, { recursive: true, force: true })
-                console.log('🧹 [Session Reset] Cleared un-registered session files.')
+                console.log('🧹 [Session Reset] Cleared session files.')
             }
         }
-        return res.json({ success: true, message: 'Session reset successfully! You can now request a fresh pairing code.' })
+        return res.json({ success: true, message: 'Session reset successfully! You can now request a fresh pairing code or scan QR code.' })
     } catch (e) {
         return res.status(500).json({ success: false, message: e.message })
     }
