@@ -24,7 +24,6 @@ const DEVELOPER_NAME = 'AHSAN'
 const DEVELOPER_NUM = '03107260507'
 const DEVELOPER_WA = 'https://wa.me/923107260507'
 const CHANNEL_URL = 'https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46'
-const BANNER_URL = 'https://files.catbox.moe/8jkhav.png'
 const ADMIN_SECRET = '03107260507'
 
 const authenticatedAdmins = new Set()
@@ -50,7 +49,7 @@ function findBannerPhotoPath() {
         path.join(process.cwd(), 'src', 'menu', 'thumbnail.jpg'),
         path.join(__dirname, 'src', 'menu', 'thumbnail.jpg'),
         path.join(process.cwd(), 'media', 'thumbnail.png'),
-        path.join(__dirname, 'media', 'thumbnail.png'),
+        path.join(__dirname, 'media', 'thumbnail.png')
     ]
     for (const p of candidates) {
         try {
@@ -91,105 +90,50 @@ async function sendMsg(chatId, text, replyMarkup = null) {
     return await tgRequest('sendMessage', payload)
 }
 
-async function sendPhoto(chatId, caption, replyMarkup = null) {
-    // 1. Cached file_id
+async function sendBannerPhoto(chatId) {
     if (cachedPhotoId) {
         try {
             const res = await tgRequest('sendPhoto', {
                 chat_id: chatId,
                 photo: cachedPhotoId,
-                caption,
-                parse_mode: 'HTML',
-                reply_markup: replyMarkup
+                caption: '⚡ <b>MASTER MD — Gojo Satoru Edition</b>\n👑 <b>Developer:</b> AHSAN (03107260507)',
+                parse_mode: 'HTML'
             })
             if (res) return res
-        } catch (e) {
+        } catch {
             cachedPhotoId = null
         }
     }
 
-    // 2. Direct Local File Upload (Zero external dependency)
     const photoPath = findBannerPhotoPath()
     if (photoPath) {
         try {
             const fileBuf = fs.readFileSync(photoPath)
             const form = new FormData()
-            const blob = new Blob([fileBuf], { type: 'image/jpeg' })
-            form.append('chat_id', String(chatId))
-            form.append('photo', blob, 'thumbnail.jpg')
-            form.append('caption', caption)
-            form.append('parse_mode', 'HTML')
-            if (replyMarkup) {
-                form.append('reply_markup', JSON.stringify(replyMarkup))
-            }
+            const fileObj = typeof File !== 'undefined'
+                ? new File([fileBuf], 'thumbnail.jpg', { type: 'image/jpeg' })
+                : new Blob([fileBuf], { type: 'image/jpeg' })
 
-            const uploadRes = await fetch(`${TG_API}/sendPhoto`, {
-                method: 'POST',
-                body: form
-            })
+            form.append('chat_id', String(chatId))
+            form.append('photo', fileObj, 'thumbnail.jpg')
+            form.append('caption', '⚡ <b>MASTER MD — Gojo Satoru Edition</b>\n👑 <b>Developer:</b> AHSAN (03107260507)')
+            form.append('parse_mode', 'HTML')
+
+            const uploadRes = await fetch(`${TG_API}/sendPhoto`, { method: 'POST', body: form })
             const data = await uploadRes.json()
 
             if (data.ok && data.result) {
                 const photos = data.result.photo || []
-                if (photos.length > 0) {
-                    cachedPhotoId = photos[photos.length - 1].file_id
-                }
+                if (photos.length > 0) cachedPhotoId = photos[photos.length - 1].file_id
                 return data.result
             } else {
                 console.error('[sendPhoto upload error]:', data.description)
-                // Retry plain text caption if HTML parse issue
-                const plainForm = new FormData()
-                plainForm.append('chat_id', String(chatId))
-                plainForm.append('photo', new Blob([fileBuf], { type: 'image/jpeg' }), 'thumbnail.jpg')
-                plainForm.append('caption', caption.replace(/<[^>]*>/g, ''))
-                if (replyMarkup) plainForm.append('reply_markup', JSON.stringify(replyMarkup))
-
-                const retryRes = await fetch(`${TG_API}/sendPhoto`, { method: 'POST', body: plainForm })
-                const retryData = await retryRes.json()
-                if (retryData.ok && retryData.result) {
-                    const photos = retryData.result.photo || []
-                    if (photos.length > 0) cachedPhotoId = photos[photos.length - 1].file_id
-                    return retryData.result
-                }
             }
-        } catch (uploadErr) {
-            console.error('[sendPhoto local upload error]:', uploadErr.message)
+        } catch (err) {
+            console.error('[sendBannerPhoto error]:', err.message)
         }
     }
-
-    // 3. Fallback to URL
-    try {
-        const urlRes = await tgRequest('sendPhoto', {
-            chat_id: chatId,
-            photo: BANNER_URL,
-            caption,
-            parse_mode: 'HTML',
-            reply_markup: replyMarkup
-        })
-        if (urlRes) return urlRes
-    } catch {}
-
-    // 4. Final Fallback to Text
-    return await sendMsg(chatId, caption, replyMarkup)
-}
-
-async function editCaption(chatId, messageId, caption, replyMarkup = null) {
-    const payload = {
-        chat_id: chatId,
-        message_id: messageId,
-        caption,
-        parse_mode: 'HTML'
-    }
-    if (replyMarkup) payload.reply_markup = replyMarkup
-    try {
-        const res = await tgRequest('editMessageCaption', payload)
-        if (res) return res
-    } catch (e) {
-        console.warn('[editCaption HTML failed, retrying plain]:', e.message)
-    }
-    payload.caption = caption.replace(/<[^>]*>/g, '')
-    delete payload.parse_mode
-    return await tgRequest('editMessageCaption', payload)
+    return null
 }
 
 async function editText(chatId, messageId, text, replyMarkup = null) {
@@ -279,7 +223,7 @@ const STATUS_INLINE = {
     ]
 }
 
-// ─── HTML Captions ───────────────────────────────────────────────────────────
+// ─── Captions ────────────────────────────────────────────────────────────────
 const WELCOME_CAPTION =
 `╔══════════════════════════════════╗
 ║  ⚡ <b>MASTER MD PAIRING PORTAL</b> ⚡  ║
@@ -316,7 +260,7 @@ const HELP_CAPTION =
 ╚══════════════════════════════════════╝
 
 <b>How to use MASTER MD once linked:</b>
-• <code>.menu</code> — Interactive button dashboard
+• <code>.menu</code> — Interactive command dashboard
 • <code>.allmenu</code> — Complete directory of 2,000+ features
 • <code>.ping</code> — Real-time server latency check
 • <code>.owner</code> — Official developer contact
@@ -354,7 +298,6 @@ ${isOnline
     }
 }
 
-// ─── Pairing Flow ────────────────────────────────────────────────────────────
 async function handlePairRequest(chatId, rawNumber) {
     const cleanNumber = normalizePhone(rawNumber)
 
@@ -417,13 +360,11 @@ async function handlePairRequest(chatId, rawNumber) {
     }
 }
 
-// ─── Callback Query Handler ──────────────────────────────────────────────────
 async function handleCallbackQuery(cb) {
     const queryId = cb.id
     const chatId = cb.message?.chat?.id
     const msgId = cb.message?.message_id
     const data = cb.data
-    const isPhotoMessage = !!cb.message?.photo
 
     if (!chatId || !data) return
 
@@ -435,32 +376,19 @@ async function handleCallbackQuery(cb) {
     }
 
     if (data === 'help_menu') {
-        if (isPhotoMessage) {
-            return editCaption(chatId, msgId, HELP_CAPTION, HELP_INLINE)
-        } else {
-            return editText(chatId, msgId, HELP_CAPTION, HELP_INLINE)
-        }
+        return editText(chatId, msgId, HELP_CAPTION, HELP_INLINE)
     }
 
     if (data === 'home_menu') {
-        if (isPhotoMessage) {
-            return editCaption(chatId, msgId, WELCOME_CAPTION, WELCOME_INLINE)
-        } else {
-            return editText(chatId, msgId, WELCOME_CAPTION, WELCOME_INLINE)
-        }
+        return editText(chatId, msgId, WELCOME_CAPTION, WELCOME_INLINE)
     }
 
     if (data === 'status_menu') {
         const statusText = await getStatusText()
-        if (isPhotoMessage) {
-            return editCaption(chatId, msgId, statusText, STATUS_INLINE)
-        } else {
-            return editText(chatId, msgId, statusText, STATUS_INLINE)
-        }
+        return editText(chatId, msgId, statusText, STATUS_INLINE)
     }
 }
 
-// ─── Message Handler ─────────────────────────────────────────────────────────
 async function handleMessage(msg) {
     const chatId = msg.chat?.id
     const text = msg.text?.trim() || ''
@@ -468,24 +396,21 @@ async function handleMessage(msg) {
 
     if (!chatId || !text) return
 
-    // ─── /start or /menu ──────────────────────────────────────────────────────
     if (text === '/start' || text === '/menu') {
-        await sendPhoto(chatId, WELCOME_CAPTION, WELCOME_INLINE)
+        await sendBannerPhoto(chatId)
+        await sendMsg(chatId, WELCOME_CAPTION, WELCOME_INLINE)
         return sendMsg(chatId, '👇 <b>Quick Keyboard loaded below. Tap any button or send your phone number anytime!</b>', MAIN_KEYBOARD)
     }
 
-    // ─── /status ──────────────────────────────────────────────────────────────
     if (text === '/status' || text === '📊 System Status') {
         const statusText = await getStatusText()
         return sendMsg(chatId, statusText, MAIN_KEYBOARD)
     }
 
-    // ─── /help ────────────────────────────────────────────────────────────────
     if (text === '/help' || text === '📖 How to Link') {
         return sendMsg(chatId, HELP_CAPTION, MAIN_KEYBOARD)
     }
 
-    // ─── Developer Info ───────────────────────────────────────────────────────
     if (text === '👑 Developer Info') {
         const devText = 
 `👑 <b>MASTER MD Developer Information</b>
@@ -507,7 +432,6 @@ async function handleMessage(msg) {
         })
     }
 
-    // ─── Official Channel ─────────────────────────────────────────────────────
     if (text === '📢 Official Channel') {
         return sendMsg(chatId, `📢 <b>Join the official MASTER MD WhatsApp Channel for updates &amp; features:</b>\n\n👉 ${CHANNEL_URL}`, {
             inline_keyboard: [
@@ -516,7 +440,6 @@ async function handleMessage(msg) {
         })
     }
 
-    // ─── Reset Session ────────────────────────────────────────────────────────
     if (text === '/reset' || text === '🔄 Reset Session') {
         sendMsg(chatId, '⏳ Resetting WhatsApp session state, please wait 2 seconds...')
         try {
@@ -527,7 +450,6 @@ async function handleMessage(msg) {
         }
     }
 
-    // ─── Admin Command ────────────────────────────────────────────────────────
     if (text.startsWith('/admin')) {
         const parts = text.split(/\s+/)
         const pin = parts[1] || ''
@@ -554,13 +476,11 @@ ${statusText}
         }
     }
 
-    // ─── Get Pairing Code Button ──────────────────────────────────────────────
     if (text === '⚡ Get Pairing Code') {
         waitingUsers.add(chatId)
         return sendMsg(chatId, `📲 <b>Please send your WhatsApp Phone Number:</b>\n\nInclude country code (e.g. <code>923107260507</code> or <code>03107260507</code>):\n\n<i>Just type your number and send!</i>`, MAIN_KEYBOARD)
     }
 
-    // ─── /pair <number> ───────────────────────────────────────────────────────
     if (text.startsWith('/pair')) {
         const parts = text.split(/\s+/)
         if (parts.length > 1 && parts[1]) {
@@ -571,7 +491,6 @@ ${statusText}
         }
     }
 
-    // ─── Direct Phone Number Detection ────────────────────────────────────────
     const digits = text.replace(/[^0-9]/g, '')
     if (digits.length >= 10 && digits.length <= 15) {
         waitingUsers.delete(chatId)
@@ -581,7 +500,6 @@ ${statusText}
     }
 }
 
-// ─── Long-Polling Engine ──────────────────────────────────────────────────────
 async function startBot() {
     console.log('🤖 [Telegram Bot] MASTER MD Ultra Native Engine starting polling...')
     await tgRequest('deleteWebhook', { drop_pending_updates: false })

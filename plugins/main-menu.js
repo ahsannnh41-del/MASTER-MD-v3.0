@@ -3,40 +3,35 @@
   ⚡ MASTER MD — Next-Gen Multi-Device WhatsApp Bot
   👑 Developer: AHSAN (03107260507)
   📢 Channel: https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46
-  ✨ 100% Native Interactive Buttons & Menu System
+  ✨ 100% Pure Standard Image Menu (No Buttons, Zero Waiting Bugs)
 ═══════════════════════════════════════════════════════════════
 */
 
 import moment from "moment-timezone"
-import { prepareWAMessageMedia, generateWAMessageFromContent } from '@whiskeysockets/baileys'
 import fs from 'fs'
 import path from 'path'
-import axios from 'axios'
-
-const VIDEO_URL = 'https://files.catbox.moe/9n2xcd.mp4'
-const MENU_DIR = path.join(process.cwd(), 'src', 'menu')
-const MENU_FILE = path.join(MENU_DIR, 'menu.mp4')
 
 const categoryNames = {
-  'main':         '✨ Main Features',
-  'owner':        '👑 Owner & Developer',
-  'ai':           '🤖 Artificial Intelligence',
-  'anime':        '🌸 Anime & Manga',
-  'economy':      '💰 Economy & RPG',
-  'game':         '🎮 Interactive Games',
-  'group':        '🛡️ Group Administration',
-  'grupo':        '👥 Group Utilities',
-  'info':         '📖 Bot Information',
-  'internet':     '🌐 Web & Search',
-  'sticker':      '🏷️ Stickers Studio',
-  'tools':        '🧰 Utilities & Tools',
-  'download':     '⬇️ Video Downloader',
-  'downloader':   '📥 Media Downloads',
-  'daily':        '📅 Daily & Rewards',
-  'serbot':       '🤖 Bot Pairing & Clones',
-  'image':        '🖼️ Image Generator',
-  'herramientas': '🔧 Utility Services',
-  'nable':        '🔌 Switch & Toggles',
+  'main':         'Main Commands',
+  'owner':        'Owner & Developer',
+  'ai':           'Artificial Intelligence',
+  'anime':        'Anime & Manga',
+  'economy':      'Economy & Banking',
+  'game':         'Interactive Games',
+  'group':        'Group Administration',
+  'grupo':        'Group Tools',
+  'info':         'Information & Status',
+  'internet':     'Web & Search',
+  'sticker':      'Stickers Studio',
+  'tools':        'Utilities & Tools',
+  'download':     'Video Downloader',
+  'downloader':   'Media Downloads',
+  'daily':        'Daily & Rewards',
+  'serbot':       'Bot Pairing & Clones',
+  'image':        'Image Generator',
+  'herramientas': 'Utility Services',
+  'nable':        'Switch & Toggles',
+  'islam':        'Islamic Features',
 }
 
 const tagIcons = {
@@ -59,45 +54,30 @@ const tagIcons = {
   'image':        '🖼️',
   'herramientas': '🔧',
   'nable':        '🔌',
+  'islam':        '🕌',
 }
 
-async function ensureMenuVideo() {
-  if (!fs.existsSync(MENU_DIR)) {
-    fs.mkdirSync(MENU_DIR, { recursive: true })
-  }
-  if (!fs.existsSync(MENU_FILE)) {
+function getLocalThumbnail() {
+  const candidates = [
+    path.join(process.cwd(), 'media', 'thumbnail.jpg'),
+    path.join(process.cwd(), 'src', 'menu', 'thumbnail.jpg'),
+    path.join(process.cwd(), 'media', 'thumbnail.png')
+  ]
+  for (const p of candidates) {
     try {
-      const res = await axios.get(VIDEO_URL, { responseType: 'arraybuffer', timeout: 15000 })
-      fs.writeFileSync(MENU_FILE, Buffer.from(res.data))
-    } catch {
-      // Fallback if network fails
-      return null
-    }
+      if (fs.existsSync(p) && fs.statSync(p).size > 1000) {
+        return fs.readFileSync(p)
+      }
+    } catch {}
   }
-  return fs.existsSync(MENU_FILE) ? fs.readFileSync(MENU_FILE) : null
-}
-
-function getActiveTags() {
-  return [...new Set(
-    Object.values(global.plugins || {})
-      .filter(p => !p.disabled && p.tags)
-      .flatMap(p => Array.isArray(p.tags) ? p.tags : [p.tags])
-  )].filter(Boolean)
-}
-
-function getCategoryRows(tags, usedPrefix = '.') {
-  return tags.map(tag => ({
-    title: `${tagIcons[tag] || '📂'} ${categoryNames[tag] || tag.toUpperCase()}`,
-    description: `View ${categoryNames[tag] || tag} commands`,
-    id: `${usedPrefix}menu ${tag}`
-  }))
+  return null
 }
 
 function getCommandsByTag(tag, usedPrefix = '.') {
   return Object.values(global.plugins || {})
     .filter(p => !p.disabled && p.tags && (Array.isArray(p.tags) ? p.tags : [p.tags]).includes(tag))
     .flatMap(p => (Array.isArray(p.help) ? p.help : [p.help]).filter(Boolean))
-    .map(cmd => `${tagIcons[tag] || '⚘'} *${usedPrefix}${cmd}*`)
+    .map(cmd => `  ${tagIcons[tag] || '◦'} *${usedPrefix}${cmd}*`)
 }
 
 function decorateCategoryHeader(catName, cmdCount) {
@@ -110,66 +90,21 @@ function decorateCategoryHeader(catName, cmdCount) {
 
 async function sendCategoryMenu(m, conn, tag, usedPrefix = '.') {
   const cmds = getCommandsByTag(tag, usedPrefix)
-  const catName = `${tagIcons[tag] || '📂'} ${categoryNames[tag] || tag}`
+  const catName = `${tagIcons[tag] || '📂'} ${categoryNames[tag] || tag.toUpperCase()}`
   const header = decorateCategoryHeader(catName, cmds.length)
   const txt = cmds.length === 0
     ? `⚠️ No commands found in category: *${catName}*`
     : `${header}\n\n${cmds.join('\n')}\n\n⚡ *MASTER MD* • Developed by AHSAN (03107260507)`
 
-  try {
-    const videoBuffer = await ensureMenuVideo()
-    let mediaMessage = null
-    if (videoBuffer) {
-      try {
-        mediaMessage = await prepareWAMessageMedia(
-          { video: videoBuffer, gifPlayback: true },
-          { upload: conn.waUploadToServer }
-        )
-      } catch {}
-    }
-
-    const allTags = getActiveTags()
-    const headerObj = mediaMessage?.videoMessage
-      ? { hasMediaAttachment: true, videoMessage: mediaMessage.videoMessage }
-      : { hasMediaAttachment: false, title: `⚡ ${catName}` }
-
-    const msg = generateWAMessageFromContent(m.chat, {
-      viewOnceMessage: {
-        message: {
-          interactiveMessage: {
-            header: headerObj,
-            body: { text: txt },
-            footer: { text: "⚡ MASTER MD • Developed by AHSAN" },
-            nativeFlowMessage: {
-              buttons: [
-                {
-                  name: "single_select",
-                  buttonParamsJson: JSON.stringify({
-                    title: "📂 Select Other Category",
-                    sections: [{ title: '📂 Bot Command Categories', rows: getCategoryRows(allTags, usedPrefix) }]
-                  })
-                },
-                {
-                  name: "quick_reply",
-                  buttonParamsJson: JSON.stringify({
-                    display_text: "🔙 Back to Main Menu",
-                    id: `${usedPrefix}menu`
-                  })
-                }
-              ],
-              messageParamsJson: JSON.stringify({
-                bottom_sheet: { in_thread_buttons_limit: 1 }
-              })
-            }
-          }
-        }
-      }
+  const thumb = getLocalThumbnail()
+  if (thumb) {
+    return await conn.sendMessage(m.chat, {
+      image: thumb,
+      caption: txt,
+      mentions: [m.sender]
     }, { quoted: m })
-
-    await conn.relayMessage(m.chat, msg.message, {})
-  } catch (e) {
-    await conn.sendMessage(m.chat, { text: txt }, { quoted: m })
   }
+  return await conn.sendMessage(m.chat, { text: txt }, { quoted: m })
 }
 
 let handler = async (m, { conn, usedPrefix, args }) => {
@@ -200,143 +135,70 @@ let handler = async (m, { conn, usedPrefix, args }) => {
 ╔══════════════════════╗
    ⚡ ＭＡＳＴＥＲ  ＭＤ ⚡
 ╚══════════════════════╝   
-> Welcome to MASTER MD
+> Welcome to MASTER MD (Gojo Satoru Edition)
 ⚡ Developed by AHSAN, ${tagUser}
-*Interactive bottom sheet menu below*
 
 ${line}
 
-▸ SYSTEM INFO
-• Bot Name   : MASTER MD v3.0.0
-• Developer  : AHSAN (03107260507)
-• Engine     : Baileys Multi-Device
-• Status     : 🟢 Online & Active
-• Uptime     : ${uptimeStr}
-• Time (PKT) : ${timeStr}
-• Prefix     : ${usedPrefix}
+▸ *SYSTEM INFO*
+• *Bot Name*   : MASTER MD v3.0.0
+• *Developer*  : AHSAN (03107260507)
+• *Engine*     : Baileys Multi-Device
+• *Status*     : 🟢 Online & Active
+• *Uptime*     : ${uptimeStr}
+• *Time (PKT)* : ${timeStr}
+• *Prefix*     : ${usedPrefix}
+• *Channel*    : https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46
 
 ${line}
 
-▸ COMMAND DIRECTORY
+▸ *COMMAND DIRECTORY*
 `
 
     for (let tag in menu) {
       const icon = tagIcons[tag] || '◦'
       const label = categoryNames[tag] || tag.toUpperCase()
-      txt += `\n◆ ${label}\n`
+      txt += `\n◆ *${icon} ${label}*\n`
       let commands = menu[tag].map(plugin => {
         const cmdList = Array.isArray(plugin.help) ? plugin.help : [plugin.help]
-        return cmdList.map(cmd => `${icon} ${usedPrefix}${cmd}`).join('\n')
+        return cmdList.map(cmd => `  ${icon} ${usedPrefix}${cmd}`).join('\n')
       }).join('\n')
       txt += `${commands}\n`
     }
 
     txt += `
 ${line}
-"Thank you for using MASTER MD! Developed by AHSAN (03107260507) ⚡"
+💡 *Quick Usage:*
+• Type \`${usedPrefix}menu <category>\` (e.g. \`${usedPrefix}menu ai\`)
+• Type \`${usedPrefix}ping\` to test server speed
+• Type \`${usedPrefix}owner\` for developer contact
+
+👑 "Thank you for using MASTER MD! Developed by AHSAN (03107260507) ⚡"
 `
 
     try { await conn.sendMessage(m.chat, { react: { text: '⚡', key: m.key } }) } catch {}
 
-    const videoBuffer = await ensureMenuVideo()
-    let mediaMessage = null
-    if (videoBuffer) {
-      try {
-        mediaMessage = await prepareWAMessageMedia(
-          { video: videoBuffer, gifPlayback: true },
-          { upload: conn.waUploadToServer }
-        )
-      } catch {}
+    const thumb = getLocalThumbnail()
+    if (thumb) {
+      await conn.sendMessage(m.chat, {
+        image: thumb,
+        caption: txt,
+        mentions: [m.sender]
+      }, { quoted: m })
+    } else {
+      await conn.sendMessage(m.chat, {
+        text: txt,
+        mentions: [m.sender]
+      }, { quoted: m })
     }
 
-    const allTags = getActiveTags()
-
-    const quickSections = [
-      {
-        title: "⚡ MASTER MD DASHBOARD",
-        highlight_label: "⭐ QUICK ACCESS",
-        rows: [
-          { title: "⚡ Check Ping Latency", description: "Test server response speed & uptime", id: `${usedPrefix}ping` },
-          { title: "👑 Developer Contact", description: "Official contact: AHSAN (03107260507)", id: `${usedPrefix}owner` },
-          { title: "📱 Web Pairing Portal", description: "Link device via 8-digit code generator", id: `${usedPrefix}pair` },
-          { title: "📢 Official Channel", description: "Join latest updates & release notes", id: `${usedPrefix}channel` }
-        ]
-      }
-    ]
-
-    const categorySections = [
-      {
-        title: "📂 COMMAND CATEGORIES",
-        rows: getCategoryRows(allTags, usedPrefix)
-      }
-    ]
-
-    const headerObj = mediaMessage?.videoMessage
-      ? { hasMediaAttachment: true, videoMessage: mediaMessage.videoMessage }
-      : { hasMediaAttachment: false, title: "⚡ MASTER MD COMMAND CENTER ⚡" }
-
-    const msg = generateWAMessageFromContent(m.chat, {
-      viewOnceMessage: {
-        message: {
-          interactiveMessage: {
-            header: headerObj,
-            body: { text: txt },
-            footer: { text: "⚡ MASTER MD • Developed by AHSAN" },
-            nativeFlowMessage: {
-              buttons: [
-                {
-                  name: "single_select",
-                  buttonParamsJson: JSON.stringify({
-                    title: "⚡ MASTER MD QUICK ACCESS",
-                    sections: quickSections
-                  })
-                },
-                {
-                  name: "single_select",
-                  buttonParamsJson: JSON.stringify({
-                    title: "📂 BROWSE CATEGORIES",
-                    sections: categorySections
-                  })
-                }
-              ],
-              messageParamsJson: JSON.stringify({
-                bottom_sheet: {
-                  in_thread_buttons_limit: 1,
-                  divider_indices: [1],
-                  list_title: "⚡ MASTER MD",
-                  button_title: "📂 Open MASTER MD Menu"
-                },
-                tap_target_configuration: {
-                  title: "▸ MASTER MD ◂",
-                  description: "Main Command Center",
-                  canonical_url: "https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46",
-                  domain: "https://whatsapp.com",
-                  button_index: 0
-                }
-              })
-            },
-            contextInfo: {
-              mentionedJid: [m.sender],
-              isForwarded: true,
-              forwardingScore: 999999
-            }
-          }
-        }
-      }
-    }, { quoted: m })
-
-    await conn.relayMessage(m.chat, msg.message, {})
-
   } catch (e) {
-    console.error(e)
-    conn.reply(m.chat, "❌ An error occurred while opening the menu. Please try typing .allmenu or .ping", m)
+    console.error('[Menu Error]:', e)
+    conn.reply(m.chat, "❌ An error occurred while opening the menu. Please try typing .ping", m)
   }
 }
 
-handler.command = [
-  'menu', 'help', 'allmenu', 'commands', 'start'
-]
-
+handler.command = ['menu', 'help', 'allmenu', 'commands', 'start']
 handler.help = ['menu']
 handler.tags = ['main']
 
