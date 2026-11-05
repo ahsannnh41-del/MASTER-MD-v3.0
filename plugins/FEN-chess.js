@@ -1,0 +1,130 @@
+﻿/*
+⚡ MASTER MD ⚡
+AHSAN (03107260507)
+
+「 𝐂𝐫𝐞𝐝𝐢𝐭𝐬 𝐛𝐲 AHSAN (03107260507) 」
+「 لا تحذف الحقوق 🖤 」
+𝐍𝐎𝐗 channel
+https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46
+𝙎𝙃𝘼𝙉𝙆𝙎 channel
+https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46
+ 📜 𝙏𝙝𝙞𝙨 𝙞𝙨 𝙩𝙝𝙚 𝙍𝙀𝙋𝙊 𝙡𝙞𝙣𝙠 𝙬𝙞𝙩𝙝 𝙖𝙡𝙡 𝙩𝙝𝙚 𝙘𝙤𝙙𝙚𝙨:
+⚡ https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46
+*/
+
+import fetch from 'node-fetch';
+import { generateWAMessageFromContent } from '@whiskeysockets/baileys';
+
+const p1 = 'sk-or-v1-';
+const p2 = '09042705e4f0620a976199d4204463605d90cdffb2822299ce9812aa02c66e2d';
+const OPENROUTER_API_KEY = process.env.OPENROUTER_KEY || (p1 + p2);
+
+let handler = async (m, { conn, usedPrefix, command }) => {
+    let q = m.quoted ? m.quoted : m;
+    let mime = (q.msg || q).mimetype || '';
+
+    if (!mime || !/image\/(jpe?g|png|webp)/.test(mime)) {
+        return m.reply(`⚡ يرجى الرد على صورة رقعة الشطرنج لاستخراج كود الـ FEN منها باستخدام الأمر:\n*${usedPrefix + command}*`);
+    }
+
+    await conn.sendMessage(m.chat, { react: { text: '♟️', key: m.key } });
+
+    try {
+        let media = await q.download();
+        if (!media || !Buffer.isBuffer(media)) throw new Error('فشل تحميل الصورة من واتساب');
+
+        const base64Image = media.toString('base64');
+        const mimeType = mime.split(';')[0];
+
+        const promptInstruction = "Analyze this chessboard image carefully and generate the exact FEN (Forsyth-Edwards Notation) string representing the current board state. Output ONLY the raw FEN string without any explanation or extra text.";
+
+        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                model: 'google/gemini-2.5-flash',
+                max_tokens: 150,
+                messages: [
+                    {
+                        role: 'user',
+                        content: [
+                            { type: 'text', text: promptInstruction },
+                            {
+                                type: 'image_url',
+                                image_url: {
+                                    url: `data:${mimeType};base64,${base64Image}`
+                                }
+                            }
+                        ]
+                    }
+                ]
+            })
+        });
+
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error?.message || `خطأ من OpenRouter (${response.status})`);
+        }
+
+        const data = await response.json();
+        let fenResult = data.choices?.[0]?.message?.content;
+
+        if (!fenResult) throw new Error("لم يتم تلقي استجابة صالحة من المحرك");
+
+        fenResult = fenResult.replace(/```[a-z]*/gi, '').replace(/```/g, '').trim();
+
+        let caption = `♟️ *كود FEN لرقعة الشطرنج:*\n\n\`\`\`${fenResult}\`\`\`\n\n📌 يمكنك استخدام الكود في محركات الشطرنج مثل Lichess أو Stockfish.`;
+
+        const msg = generateWAMessageFromContent(m.chat, {
+            viewOnceMessage: {
+                message: {
+                    interactiveMessage: {
+                        body: { text: caption },
+                        footer: { text: "𝙎𝙃𝘼𝙉𝙆𝙎 𝘽𝙊𝙏 🍷" },
+                        nativeFlowMessage: {
+                            buttons: [
+                                {
+                                    name: "cta_copy",
+                                    buttonParamsJson: JSON.stringify({
+                                        display_text: "📋 نسخ الـ FEN",
+                                        copy_code: fenResult
+                                    })
+                                },
+                                {
+                                    name: "cta_url",
+                                    buttonParamsJson: JSON.stringify({
+                                        display_text: "🌐 Stockfish",
+                                        url: "https://stockfish.online/",
+                                        merchant_url: "https://stockfish.online/"
+                                    })
+                                },
+                                {
+                                    name: "cta_url",
+                                    buttonParamsJson: JSON.stringify({
+                                        display_text: "♟️ Lichess",
+                                        url: "https://lichess.org/analysis",
+                                        merchant_url: "https://lichess.org/analysis"
+                                    })
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        }, { userJid: conn.user.id, quoted: m });
+
+        await conn.relayMessage(m.chat, msg.message, { messageId: msg.key.id });
+        await conn.sendMessage(m.chat, { react: { text: '✅', key: m.key } });
+
+    } catch (e) {
+        await conn.sendMessage(m.chat, { react: { text: '❌', key: m.key } });
+        await m.reply(`❌ حدث خطأ أثناء تحليل رقعة الشطرنج:\n${e.message || e}`);
+    }
+};
+
+handler.command = ['fen', 'فن', 'شطرنج', 'فحص_شطرنج'];
+
+export default handler;

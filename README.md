@@ -1,81 +1,44 @@
-# ⚡ MASTER MD (v3.0.0) ⚡
-> **The Ultimate WhatsApp Multi-Device Powerhouse Bot**  
-> **Developed by: AHSAN**
+# ⚡ MASTER MD (NOX Powerhouse Edition)
 
-![MASTER MD](https://files.catbox.moe/8jkhav.png)
+> **Next-Gen Multi-Device WhatsApp Bot with Native Interactive Buttons, Web Pairing System & Telegram Bot Integration.**
+> **Developed by: AHSAN (03107260507)**
+> **Official Channel:** [Join Here](https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46)
 
 ---
 
 ## 🌟 Key Features
-
-* 👑 **Exclusive Developer Branding:** Complete bot, credits, menus, and logs belong strictly to **AHSAN**.
-* 🔘 **Interactive Buttons System:** Fully interactive modern WhatsApp buttons (`native_flow`, `single_select`, list menu categories, and action CTA buttons).
-* 🌐 **Web Pairing Portal:** Deployable on **Vercel, Netlify, Render, or VPS** — users can simply enter their number and get an 8-digit pairing code to link WhatsApp.
-* 🛡️ **Code Protection & Anti-Theft:** Advance encryption and obfuscation (`scripts/encrypt.js`) to protect your bot source code against theft or unauthorized editing.
-* ⚡ **2000+ Commands & Features:**
-  * **AI Supercharged:** Chatbot with smart persona, image generators, DALL-E, Puter.js.
-  * **Media Downloaders:** YouTube, Instagram, TikTok, Facebook, Twitter/X, SoundCloud.
-  * **Group Security:** Antilink, Antidelete, AntiNSFW, Anticall, Antispam, Auto-moderation.
-  * **Utilities & Converters:** Math solvers, encodings, image filters, and text generators.
-  * **Jadibot / Sub-Bot Pairing:** Host multiple numbers on one bot instance.
+- **Native Interactive Flow Buttons**: Uses WhatsApp's high-speed native flow bottom sheets without the "Waiting for this message" decryption clock bugs.
+- **Dynamic Category Browser**: Multi-level category single-select sheets (Admin, Downloader, Games, RPG, Media, Tools, AI, Info).
+- **Web Pairing Portal**: Browser-based 8-digit WhatsApp linking system on `http://localhost:3000`.
+- **Telegram Pairing Bot**: Link your WhatsApp account seamlessly directly from Telegram!
+- **100% English**: Clean interface, English commands, professional format.
+- **Render & Cloud Deploy Ready**: Native Express port binding with `/health` uptime monitoring.
 
 ---
 
-## 🚀 Quick Setup & Deployment
+## 🚀 Quick Start
 
-### 1️⃣ Bot Deployment (Pterodactyl / VPS / Koyeb / Render)
-
-1. Clone or upload the `MASTER-MD` repository.
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Configure your settings in `setting.js`:
-   * `creatorNumber`: Apna phone number likhein (e.g. `923001234567`).
-   * `channelUrl`: Apna WhatsApp channel link daalein.
-4. Start the bot:
-   ```bash
-   npm start
-   ```
-5. Console me ya Web Portal par apna number laga kar **8-digit Pairing Code** WhatsApp me daalein aur bot connect kar lein!
-
----
-
-### 2️⃣ Web Pairing Portal Deployment (Vercel / Netlify / Render)
-
-Aap web pairing system ko **1-Click** Vercel ya Netlify par deploy kar sakte hain:
-
-#### Deploy to Vercel:
-1. `MASTER-MD/web-pairing` folder ko GitHub par push karein ya Vercel dashboard me import karein.
-2. Vercel automatically `vercel.json` detect karega.
-3. **Deploy** button dabayein!
-4. Website link ready ho jayega jahan koi bhi apna number enter kar ke pairing code hasil kar sakta hai.
-
-#### Standalone Express Server:
-Agar local ya VPS par web portal chalana hai:
+### 1. Install Dependencies
 ```bash
-npm run pair-server
+npm install
 ```
-Portal live ho jayega: `http://localhost:3000`
 
----
-
-### 3️⃣ Code Encryption & Protection (Anti-Theft)
-
-Apne bot ka source code encrypt / obfuscate karne ke liye:
+### 2. Start Web Pairing Portal & Bot
 ```bash
-npm run build:protect
+npm start
 ```
-Yeh script automatically saare `.js` files ko encrypt kar ke **`MASTER-MD-PROTECTED`** folder bana dega. Us encrypted version me:
-* Koi bhi code ko edit nahi kar sakega.
-* AHSAN ka developer credit hamesha safe rahega.
-* Files me anti-tamper security active hogi.
+- Open `http://localhost:3000` in your browser.
+- Enter your WhatsApp number (e.g., `923107260507`).
+- Get your 8-digit linking code instantly!
+
+### 3. (Optional) Run Telegram Pairing Bot
+```bash
+TELEGRAM_BOT_TOKEN="your_telegram_bot_token" npm run telegram
+```
 
 ---
 
-## 📜 Credits & License
-
-* **Developer:** AHSAN
-* **Engine:** Baileys Multi-Device (@whiskeysockets/baileys)
-* **Bot Name:** MASTER MD
-* **Copyright:** © 2026 MASTER MD. All Rights Reserved to AHSAN.
+## 👑 Developer Contact
+- **Developer:** AHSAN
+- **WhatsApp:** +92 310 7260507
+- **Official Channel:** https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46
