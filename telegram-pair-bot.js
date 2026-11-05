@@ -9,7 +9,7 @@
 import TelegramBot from 'node-telegram-bot-api'
 import axios from 'axios'
 
-const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.TG_TOKEN || ''
+const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.TG_TOKEN || global.tgToken || '9104594619:AAHaspLTBfwlKCTSU1xsmCPi0GZ-bFAP2M8'
 const MASTER_MD_PORT = process.env.PORT || 3000
 const MASTER_MD_URL = process.env.MASTER_MD_URL || `http://localhost:${MASTER_MD_PORT}`
 
@@ -93,7 +93,7 @@ _Or simply send your phone number directly in this chat!_`
         bot.sendMessage(chatId, `⏳ *Generating pairing code for:* \`${rawNumber}\`...\nPlease wait 2-3 seconds.`, { parse_mode: 'Markdown' })
 
         try {
-            const res = await axios.post(`${MASTER_MD_URL}/api/pair`, { phoneNumber: rawNumber }, { timeout: 25000 })
+            const res = await axios.post(`${MASTER_MD_URL}/api/pair`, { phoneNumber: rawNumber, force: true }, { timeout: 25000 })
             const data = res.data
 
             if (data.success && data.code) {

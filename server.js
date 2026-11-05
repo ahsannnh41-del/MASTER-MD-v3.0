@@ -186,3 +186,14 @@ console.log('🚀 [MASTER MD] Launching WhatsApp Baileys Engine...')
 import('./index.js').catch(err => {
     console.error('❌ [MASTER MD] Bot start error:', err)
 })
+
+// Automatically launch Telegram Pairing Bot
+setTimeout(() => {
+    const tgToken = process.env.TELEGRAM_BOT_TOKEN || process.env.TG_TOKEN || global.tgToken || '9104594619:AAHaspLTBfwlKCTSU1xsmCPi0GZ-bFAP2M8'
+    if (tgToken) {
+        console.log('🤖 [MASTER MD] Launching Telegram Pairing Bot...')
+        import('./telegram-pair-bot.js').catch(err => {
+            console.error('⚠️ [Telegram Bot Start Error]:', err.message)
+        })
+    }
+}, 3000)

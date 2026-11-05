@@ -4,6 +4,7 @@ import { fileURLToPath } from "url"
 import fs from "fs"
 
 global.botNumber = process.env.BOT_NUMBER || "" 
+global.tgToken = process.env.TELEGRAM_BOT_TOKEN || process.env.TG_TOKEN || "9104594619:AAHaspLTBfwlKCTSU1xsmCPi0GZ-bFAP2M8" // Telegram Bot Token for Pairing Bot 
 
 global.owner = [
     ["923107260507", "👑 AHSAN", true, "923107260507@s.whatsapp.net"],
