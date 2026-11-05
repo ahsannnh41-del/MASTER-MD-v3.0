@@ -1,4 +1,4 @@
-﻿/*
+/*
 ⚡ MASTER MD ⚡
 AHSAN (03107260507)
 
@@ -563,16 +563,7 @@ function msToTime(duration) {
 }
 
 async function joinChannels(sock) {
-
-  for (const value of Object.values(global.ch)) {
-
-    if (typeof value === 'string' && value.endsWith('@newsletter')) {
-
-      await sock.newsletterFollow(value).catch(() => {})
-
-    }
-
-  }
-
-  }
+  // Disabled for Anti-Ban protection
+  return false
+}
 

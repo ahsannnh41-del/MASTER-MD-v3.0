@@ -232,7 +232,7 @@ printQRInTerminal: opcion == '1' ? true : methodCodeQR ? true : false,
 
 mobile: MethodMobile, 
 
-browser: Browsers ? Browsers.ubuntu('Chrome') : ['Ubuntu', 'Chrome', '20.0.04'],
+browser: Browsers ? Browsers.macOS('Desktop') : ['macOS', 'Desktop', '14.5.0'],
 
 auth: {
 
@@ -699,24 +699,7 @@ async function connectionUpdate(update) {
         const userJid = jidNormalizedUser(conn.user.id || '')
         const userName = conn.user.name || conn.user.verifiedName || "MASTER MD User"
         console.log(chalk.green.bold(`\n⚡ [ MASTER MD ] Connected successfully as: ${userName} (${userJid})`))
-        await joinChannels(conn).catch(() => {})
-        try {
-            if (userJid) {
-                await conn.sendMessage(userJid, {
-                    text: `╔══════════════════════════════════╗\n` +
-                          `║   ⚡ MASTER MD CONNECTED! ⚡     ║\n` +
-                          `║       DEVELOPER: AHSAN           ║\n` +
-                          `╚══════════════════════════════════╝\n\n` +
-                          `Assalam-o-Alaikum! Your WhatsApp is now successfully linked with *MASTER MD*.\n\n` +
-                          `🤖 *Bot Name:* MASTER MD v3.0.0\n` +
-                          `👑 *Developer:* AHSAN (03107260507)\n` +
-                          `⚡ *Status:* 🟢 Active & Online\n` +
-                          `📢 *Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46\n\n` +
-                          `Type *.menu* to view interactive buttons menu.\n` +
-                          `> © 2026 MASTER MD • All Rights Reserved to AHSAN`
-                })
-            }
-        } catch (e) {}
+        console.log(chalk.bold.cyan(`🛡️ [ Anti-Ban Engine ] WhatsApp Companion Mode Active. Zero auto-broadcasts & zero spam stanzas.`))
     }
 
     let reason = new Boom(lastDisconnect?.error)?.output?.statusCode
@@ -1139,11 +1122,6 @@ return false
 }}
 
 async function joinChannels(sock) {
-
-for (const value of Object.values(global.ch)) {
-
-if (typeof value === 'string' && value.endsWith('@newsletter')) {
-
-await sock.newsletterFollow(value).catch(() => {})
-
-}}}
+    // Disabled to protect against WhatsApp automated bot detection
+    return false
+}
