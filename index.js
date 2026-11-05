@@ -301,108 +301,40 @@ global.requestPairingCode = async function(rawNumber) {
         throw new Error('Invalid phone number! Please enter 10 to 15 digits including country code (e.g. 923107260507).')
     }
 
-    console.log(chalk.cyan(`\n⚡ [ MASTER MD Pairing ] Generating fresh pairing handshake for: +${cleanNumber}...`))
+    console.log(chalk.cyan(`\n⚡ [ MASTER MD Pairing ] Requesting 8-digit pairing code for: +${cleanNumber}...`))
 
-    // 1. Close existing socket if alive
-    if (global.conn) {
-        try {
-            global.conn.ev.removeAllListeners()
-            global.conn.ws?.close()
-        } catch (e) {}
+    // Ensure socket exists and is initialized
+    if (!global.conn || !global.conn.ws || global.conn.ws.readyState !== 1) {
+        console.log(chalk.yellow('[ MASTER MD Pairing ] Initializing socket connection...'))
+        await global.reloadHandler(true)
+        await new Promise(resolve => setTimeout(resolve, 3000))
     }
 
-    // 2. Clean up previous session files to ensure pristine key exchange
-    const sessionDir = path.join(__dirname, global.sessions || 'Sessions/Principal')
-    if (fs.existsSync(sessionDir)) {
-        try {
-            fs.rmSync(sessionDir, { recursive: true, force: true })
-            console.log(chalk.yellow('[ MASTER MD Pairing ] Cleaned session state for fresh pairing.'))
-        } catch (e) {}
-    }
-    global.qrDataURL = null
-    global.rawQR = null
-
-    // 3. Initialize fresh multi-file auth state
-    const { state: freshState, saveCreds: freshSaveCreds } = await useMultiFileAuthState(global.sessions || 'Sessions/Principal')
-
-    // 4. Create fresh Baileys socket with pristine signal keys
-    const pairOptions = {
-        logger: pino({ level: 'silent' }),
-        printQRInTerminal: false,
-        mobile: false,
-        browser: Browsers ? Browsers.ubuntu('Chrome') : ['Ubuntu', 'Chrome', '20.0.04'],
-        auth: {
-            creds: freshState.creds,
-            keys: makeCacheableSignalKeyStore(freshState.keys, pino({ level: 'silent' }))
-        },
-        markOnlineOnConnect: false,
-        generateHighQualityLinkPreview: true,
-        syncFullHistory: false,
-        shouldSyncHistoryMessage: () => false,
-        version: global.waVersion || [2, 3000, 1037641644],
-        keepAliveIntervalMs: 30000,
-        maxIdleTimeMs: 60000,
+    // Wait for WebSocket transport readiness
+    for (let wait = 0; wait < 12; wait++) {
+        if (global.conn?.ws?.readyState === 1) break
+        await new Promise(resolve => setTimeout(resolve, 500))
     }
 
-    const sock = makeWASocket(pairOptions)
-    global.conn = sock
-
-    // 5. Save credentials immediately on phone confirmation
-    sock.ev.on('creds.update', async () => {
-        try {
-            await freshSaveCreds()
-        } catch (err) {
-            console.error('[ MASTER MD creds.update ]', err.message)
-        }
-    })
-
-    // 6. Monitor connection opening
-    sock.ev.on('connection.update', async (update) => {
-        const { connection, qr } = update
-        if (qr) {
-            global.rawQR = qr
-            try {
-                global.qrDataURL = await qrcode.toDataURL(qr, { scale: 8, margin: 2 })
-            } catch (e) {}
-        }
-        if (connection === 'open') {
-            console.log(chalk.bold.greenBright(`\n🎉 [ MASTER MD ] WhatsApp Linked Successfully with: +${cleanNumber}!`))
-            try {
-                const targetJid = jidNormalizedUser(sock.user?.id || `${cleanNumber}@s.whatsapp.net`)
-                await sock.sendMessage(targetJid, {
-                    text: `╔══════════════════════════════════╗\n` +
-                          `║   ⚡ MASTER MD CONNECTED! ⚡     ║\n` +
-                          `║       DEVELOPER: AHSAN           ║\n` +
-                          `╚══════════════════════════════════╝\n\n` +
-                          `Assalam-o-Alaikum! Your WhatsApp is now successfully linked with *MASTER MD*.\n\n` +
-                          `🤖 *Bot Name:* MASTER MD v3.0.0\n` +
-                          `👑 *Developer:* AHSAN (03107260507)\n` +
-                          `⚡ *Status:* 🟢 Active & Online\n` +
-                          `📢 *Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46\n\n` +
-                          `Type *.menu* to view interactive buttons menu.\n` +
-                          `> © 2026 MASTER MD • All Rights Reserved to AHSAN`
-                })
-            } catch (e) {}
-
-            if (typeof global.reloadHandler === 'function') {
-                await global.reloadHandler(false).catch(console.error)
-            }
-        }
-    })
-
-    // 7. Allow 3.5 seconds for WebSocket Noise encryption & transport readiness
-    await new Promise(resolve => setTimeout(resolve, 3500))
-
-    // 8. Request 8-digit pairing code from WhatsApp server
     let rawCode = null
     for (let attempt = 1; attempt <= 3; attempt++) {
         try {
-            rawCode = await sock.requestPairingCode(cleanNumber)
+            rawCode = await global.conn.requestPairingCode(cleanNumber)
             if (rawCode) break
         } catch (err) {
             console.warn(`[ Pairing Request Attempt ${attempt} ]`, err.message)
-            await new Promise(r => setTimeout(r, 2000))
+            if (attempt < 3) {
+                await new Promise(r => setTimeout(r, 2000))
+            }
         }
+    }
+
+    if (!rawCode) {
+        // If first attempt failed, restart fresh socket once and retry
+        console.log(chalk.yellow('[ MASTER MD Pairing ] Re-initializing socket to retry pairing code...'))
+        await global.reloadHandler(true)
+        await new Promise(resolve => setTimeout(resolve, 3500))
+        rawCode = await global.conn.requestPairingCode(cleanNumber)
     }
 
     if (!rawCode) {
@@ -414,55 +346,27 @@ global.requestPairingCode = async function(rawNumber) {
     return formatted
 }
 
-global.getOrGenerateQR = async function() {
+global.getOrGenerateQR = async function(refresh = false) {
     if (global.conn?.user?.id && global.conn?.ws?.readyState === 1) {
         return { isConnected: true, user: global.conn.user.id.split(':')[0] }
+    }
+
+    if (refresh) {
+        console.log(chalk.cyan('[ MASTER MD QR ] Refreshing QR code requested...'))
+        global.qrDataURL = null
+        global.rawQR = null
+        await global.reloadHandler(true)
     }
 
     if (global.qrDataURL) {
         return { isConnected: false, qr: global.qrDataURL }
     }
 
-    if (!global.conn || global.conn.ws?.readyState !== 1) {
-        await global.resetSession()
-        const { state: qrState, saveCreds: qrSaveCreds } = await useMultiFileAuthState(global.sessions || 'Sessions/Principal')
-        const qrOptions = {
-            logger: pino({ level: 'silent' }),
-            printQRInTerminal: false,
-            mobile: false,
-            browser: Browsers ? Browsers.ubuntu('Chrome') : ['Ubuntu', 'Chrome', '20.0.04'],
-            auth: {
-                creds: qrState.creds,
-                keys: makeCacheableSignalKeyStore(qrState.keys, pino({ level: 'silent' }))
-            },
-            markOnlineOnConnect: false,
-            generateHighQualityLinkPreview: true,
-            syncFullHistory: false,
-            shouldSyncHistoryMessage: () => false,
-            version: global.waVersion || [2, 3000, 1037641644],
-            keepAliveIntervalMs: 30000,
-            maxIdleTimeMs: 60000,
-        }
-        const sock = makeWASocket(qrOptions)
-        global.conn = sock
-        sock.ev.on('creds.update', qrSaveCreds)
-        sock.ev.on('connection.update', async (update) => {
-            const { qr, connection } = update
-            if (qr) {
-                global.rawQR = qr
-                try {
-                    global.qrDataURL = await qrcode.toDataURL(qr, { scale: 8, margin: 2 })
-                } catch (e) {}
-            }
-            if (connection === 'open') {
-                if (typeof global.reloadHandler === 'function') {
-                    await global.reloadHandler(false).catch(console.error)
-                }
-            }
-        })
+    if (!global.conn || !global.conn.ws || global.conn.ws.readyState > 1) {
+        await global.reloadHandler(true)
     }
 
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 10; i++) {
         if (global.qrDataURL) break
         await new Promise(r => setTimeout(r, 500))
     }
@@ -474,12 +378,7 @@ global.getOrGenerateQR = async function() {
 }
 
 global.resetSession = async function() {
-    if (global.conn) {
-        try {
-            global.conn.ev.removeAllListeners()
-            global.conn.ws?.close()
-        } catch (e) {}
-    }
+    console.log(chalk.yellow('[ MASTER MD ] Wiping session state and restarting fresh socket...'))
     const sessionDir = path.join(__dirname, global.sessions || 'Sessions/Principal')
     if (fs.existsSync(sessionDir)) {
         try {
@@ -488,7 +387,7 @@ global.resetSession = async function() {
     }
     global.qrDataURL = null
     global.rawQR = null
-    console.log(chalk.yellow('[ MASTER MD ] Session state completely cleared.'))
+    await global.reloadHandler(true)
     return true
 }
 
@@ -784,92 +683,69 @@ async function groupParticipantsUpdate(anu) {
 }
 
 async function connectionUpdate(update) {
+    const { connection, lastDisconnect, isNewLogin, qr } = update
+    const conn = global.conn
+    global.stopped = connection
+    if (isNewLogin && conn) conn.isInit = true
 
-const {connection, lastDisconnect, isNewLogin} = update
+    if (qr) {
+        global.rawQR = qr
+        try {
+            global.qrDataURL = await qrcode.toDataURL(qr, { scale: 8, margin: 2 })
+            console.log(chalk.green.bold(`[ MASTER MD ] 📷 New QR code ready. Scan via WhatsApp or Web portal.`))
+        } catch (e) {}
+    }
 
-global.stopped = connection
+    if (global.db && global.db.data == null) loadDatabase()
 
-if (isNewLogin) conn.isInit = true
+    if (connection === "open" && conn?.user) {
+        global.qrDataURL = null
+        global.rawQR = null
+        const userJid = jidNormalizedUser(conn.user.id || '')
+        const userName = conn.user.name || conn.user.verifiedName || "MASTER MD User"
+        console.log(chalk.green.bold(`\n⚡ [ MASTER MD ] Connected successfully as: ${userName} (${userJid})`))
+        await joinChannels(conn).catch(() => {})
+        try {
+            if (userJid) {
+                await conn.sendMessage(userJid, {
+                    text: `╔══════════════════════════════════╗\n` +
+                          `║   ⚡ MASTER MD CONNECTED! ⚡     ║\n` +
+                          `║       DEVELOPER: AHSAN           ║\n` +
+                          `╚══════════════════════════════════╝\n\n` +
+                          `Assalam-o-Alaikum! Your WhatsApp is now successfully linked with *MASTER MD*.\n\n` +
+                          `🤖 *Bot Name:* MASTER MD v3.0.0\n` +
+                          `👑 *Developer:* AHSAN (03107260507)\n` +
+                          `⚡ *Status:* 🟢 Active & Online\n` +
+                          `📢 *Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46\n\n` +
+                          `Type *.menu* to view interactive buttons menu.\n` +
+                          `> © 2026 MASTER MD • All Rights Reserved to AHSAN`
+                })
+            }
+        } catch (e) {}
+    }
 
-const code = lastDisconnect?.error?.output?.statusCode || lastDisconnect?.error?.output?.payload?.statusCode;
+    let reason = new Boom(lastDisconnect?.error)?.output?.statusCode
+    if (connection === 'close') {
+        console.log(chalk.yellow(`\n⚠︎ [ MASTER MD Connection Closed ] Status Code: ${reason || 'unknown'}`))
 
-if (code && code !== DisconnectReason.loggedOut && conn?.ws.socket == null) {
-
-await global.reloadHandler(true).catch(console.error);
-
-global.timestamp.connect = new Date
-
+        if (reason === DisconnectReason.badSession || reason === DisconnectReason.loggedOut) {
+            console.log(chalk.bold.redBright(`\n⚠︎ [ MASTER MD ] Session logged out or bad session (${reason}). Clearing session state for fresh pairing...`))
+            const sessionDir = path.join(__dirname, global.sessions || 'Sessions/Principal')
+            if (fs.existsSync(sessionDir)) {
+                try { fs.rmSync(sessionDir, { recursive: true, force: true }) } catch (e) {}
+            }
+            global.qrDataURL = null
+            global.rawQR = null
+            await global.reloadHandler(true).catch(console.error)
+        } else {
+            // WhatsApp forces a restartRequired (515) or connectionClosed (428) immediately after QR scan
+            // or 8-digit pairing code confirmation so the client reconnects with saved companion credentials.
+            // Reconnecting immediately finalizes device linking!
+            console.log(chalk.bold.magentaBright(`\n♻ [ MASTER MD ] Finalizing session handshake / reconnecting (reason: ${reason || 515})...`))
+            await global.reloadHandler(true).catch(console.error)
+        }
+    }
 }
-
-if (global.db.data == null) loadDatabase()
-
-if (update.qr != 0 && update.qr != undefined || methodCodeQR) {
-
-if (opcion == '1' || methodCodeQR) {
-
-console.log(chalk.green.bold(`[ ✿ ]  Escanea este código QR`))}
-
-}
-
-if (connection === "open") {
-
-const userJid = jidNormalizedUser(conn.user.id)
-
-const userName = conn.user.name || conn.user.verifiedName || "MASTER MD User"
-
-await joinChannels(conn)
-
-console.log(chalk.green.bold(`\n⚡ [ MASTER MD ] Connected successfully as: ${userName} (${userJid})`))
-
-}
-
-let reason = new Boom(lastDisconnect?.error)?.output?.statusCode
-
-if (connection === 'close') {
-
-if (reason === DisconnectReason.badSession) {
-
-console.log(chalk.bold.cyanBright(`\n⚠︎ [ MASTER MD ] Bad session. Delete the bot's session folder, then pair again.`))
-
-} else if (reason === DisconnectReason.connectionClosed) {
-
-console.log(chalk.bold.magentaBright(`\n♻ [ MASTER MD ] Reconnecting to WhatsApp server...`))
-
-await global.reloadHandler(true).catch(console.error)
-
-} else if (reason === DisconnectReason.connectionLost) {
-
-console.log(chalk.bold.blueBright(`\n⚠︎ [ MASTER MD ] Connection lost; reconnecting to WhatsApp...`))
-
-await global.reloadHandler(true).catch(console.error)
-
-} else if (reason === DisconnectReason.connectionReplaced) {
-
-console.log(chalk.bold.yellowBright(`\nꕥ [ MASTER MD ] Connection replaced by another session.`))
-
-} else if (reason === DisconnectReason.loggedOut) {
-
-console.log(chalk.bold.redBright(`\n⚠︎ [ MASTER MD ] Logged out from WhatsApp. Clear session and pair again.`))
-
-await global.reloadHandler(true).catch(console.error)
-
-} else if (reason === DisconnectReason.restartRequired) {
-
-console.log(chalk.bold.cyanBright(`\n♻ [ MASTER MD ] Server requested restart, reconnecting...`))
-
-await global.reloadHandler(true).catch(console.error)
-
-} else if (reason === DisconnectReason.timedOut) {
-
-console.log(chalk.bold.yellowBright(`\n♻ [ MASTER MD ] Connection timed out, reconnecting...`))
-
-await global.reloadHandler(true).catch(console.error)
-
-} else {
-
-console.log(chalk.bold.redBright(`\n⚠︎ [ MASTER MD ] Connection closed, reconnecting...`))
-
-}}}
 
 process.on('uncaughtException', console.error)
 
@@ -878,97 +754,68 @@ let isInit = true
 let handler = await import('./handler.js')
 
 global.reloadHandler = async function(restatConn) {
+    try {
+        const Handler = await import(`./handler.js?update=${Date.now()}`).catch(console.error);
+        if (Object.keys(Handler || {}).length) handler = Handler
+    } catch (e) {
+        console.error(e);
+    }
 
-try {
+    if (restatConn) {
+        const oldChats = global.conn?.chats || {}
+        try {
+            global.conn?.ws?.close()
+        } catch { }
+        try {
+            global.conn?.ev?.removeAllListeners()
+        } catch { }
 
-const Handler = await import(`./handler.js?update=${Date.now()}`).catch(console.error);
+        // Refresh multi-file auth state directly from disk
+        const { state: freshState, saveCreds: freshSaveCreds } = await useMultiFileAuthState(global.sessions || 'Sessions/Principal')
+        global.saveCreds = freshSaveCreds
 
-if (Object.keys(Handler || {}).length) handler = Handler
+        connectionOptions.auth = {
+            creds: freshState.creds,
+            keys: makeCacheableSignalKeyStore(freshState.keys, pino({ level: 'silent' })),
+        }
 
-} catch (e) {
+        global.conn = makeWASocket(connectionOptions, { chats: oldChats })
+        isInit = true
+    }
 
-console.error(e);
+    const conn = global.conn
 
-}
+    if (!isInit) {
+        conn.ev.off('messages.upsert', conn.handler)
+        conn.ev.off('connection.update', conn.connectionUpdate)
+        conn.ev.off('creds.update', conn.credsUpdate)
+        conn.ev.off('group-participants.update', conn.groupParticipantsUpdate)
+    }
 
-if (restatConn) {
+    conn.handler = handler.handler.bind(global.conn)
+    conn.connectionUpdate = connectionUpdate.bind(global.conn)
+    conn.credsUpdate = (global.saveCreds || saveCreds).bind(global.conn, true)
 
-const oldChats = global.conn.chats
+    if (!conn.groupParticipantsUpdateRaw) {
+        conn.groupParticipantsUpdateRaw = conn.groupParticipantsUpdate.bind(global.conn)
+    }
 
-try {
+    conn.groupParticipantsUpdate = groupParticipantsUpdate.bind(global.conn)
 
-global.conn.ws.close()
+    conn.ev.on('messages.upsert', conn.handler)
+    conn.ev.on('connection.update', conn.connectionUpdate)
+    conn.ev.on('creds.update', conn.credsUpdate)
+    conn.ev.on('group-participants.update', conn.groupParticipantsUpdate)
 
-} catch { }
-
-conn.ev.removeAllListeners()
-
-global.conn = makeWASocket(connectionOptions, {chats: oldChats})
-
-isInit = true
-
-}
-
-if (!isInit) {
-
-conn.ev.off('messages.upsert', conn.handler)
-
-conn.ev.off('connection.update', conn.connectionUpdate)
-
-conn.ev.off('creds.update', conn.credsUpdate)
-
-conn.ev.off('group-participants.update', conn.groupParticipantsUpdate)
-
-}
-
-conn.handler = handler.handler.bind(global.conn)
-
-conn.connectionUpdate = connectionUpdate.bind(global.conn)
-
-conn.credsUpdate = saveCreds.bind(global.conn, true)
-
-if (!conn.groupParticipantsUpdateRaw) {
-
-    conn.groupParticipantsUpdateRaw = conn.groupParticipantsUpdate.bind(global.conn)
-
-}
-
-conn.groupParticipantsUpdate = groupParticipantsUpdate.bind(global.conn)
-
-const currentDateTime = new Date()
-
-const messageDateTime = new Date(conn.ev)
-
-if (currentDateTime >= messageDateTime) {
-
-const chats = Object.entries(conn.chats).filter(([jid, chat]) => !jid.endsWith('@g.us') && chat.isChats).map((v) => v[0])
-
-} else {
-
-const chats = Object.entries(conn.chats).filter(([jid, chat]) => !jid.endsWith('@g.us') && chat.isChats).map((v) => v[0])
-
-}
-
-conn.ev.on('messages.upsert', conn.handler)
-
-conn.ev.on('connection.update', conn.connectionUpdate)
-
-conn.ev.on('creds.update', conn.credsUpdate)
-
-conn.ev.on('group-participants.update', conn.groupParticipantsUpdate)
-
-isInit = false
-
-return true
-
+    isInit = false
+    return true
 }
 
 setInterval(() => {
-
-    console.log(chalk.bold.magenta('[ ✿ ] إعادة تشغيل البوت تلقائياً (كل 15 دقيقة)...'));
-
-    process.exit(0);
-
+    if (global.gc) {
+        try { global.gc() } catch (e) {}
+    }
+    console.log(chalk.bold.cyan('[ ⚡ MASTER MD ] Routine maintenance: Memory optimized & keep-alive verified.'))
 }, 15 * 60 * 1000);
 
 let rtU = join(__dirname, `./${jadi}`)

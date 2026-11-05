@@ -73,8 +73,9 @@ app.get('/api/status', (req, res) => {
 // Live QR code endpoint
 app.get('/api/qr', async (req, res) => {
     try {
+        const refresh = req.query.refresh === 'true'
         if (typeof global.getOrGenerateQR === 'function') {
-            const qrResult = await global.getOrGenerateQR()
+            const qrResult = await global.getOrGenerateQR(refresh)
             return res.json({ success: true, ...qrResult })
         }
         if (global.qrDataURL) {
@@ -107,6 +108,13 @@ app.post('/api/pair', async (req, res) => {
                 user: global.conn.user.id.split(':')[0],
                 message: 'MASTER MD is already online and connected as +' + global.conn.user.id.split(':')[0] + '. Click "Force Re-Pair" below if you want to link a new number.'
             })
+        }
+
+        if (force) {
+            if (typeof global.resetSession === 'function') {
+                await global.resetSession()
+                await new Promise(r => setTimeout(r, 2500))
+            }
         }
 
         // Wait up to 5 seconds if bot engine is still loading

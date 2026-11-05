@@ -1494,13 +1494,13 @@
             });
 
             // QR Code Loader
-            async function loadQRCode() {
+            async function loadQRCode(force = false) {
                 qrLoading.style.display = 'block';
                 qrImage.style.display = 'none';
-                qrStatusText.textContent = 'Generating QR code...';
+                qrStatusText.textContent = force ? 'Refreshing fresh QR code...' : 'Generating QR code...';
 
                 try {
-                    const res = await fetch('/api/qr');
+                    const res = await fetch('/api/qr' + (force ? '?refresh=true' : ''));
                     const data = await res.json();
                     if (data.isConnected) {
                         showSuccessCard();
@@ -1534,7 +1534,7 @@
             }
 
             btnRefreshQR.addEventListener('click', () => {
-                loadQRCode();
+                loadQRCode(true);
             });
 
             // Handle Pairing Code Submit
@@ -1582,7 +1582,7 @@
                     statusMessage.textContent = 'Waiting for you to enter the code in WhatsApp...';
 
                     playBeep(880, 0.15);
-                    startTimer(60);
+                    startTimer(120);
                     startStatusPolling();
 
                 } catch (err) {
