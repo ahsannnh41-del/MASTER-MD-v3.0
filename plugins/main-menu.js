@@ -3,7 +3,7 @@
   ⚡ MASTER MD — Next-Gen Multi-Device WhatsApp Bot
   👑 Developer: AHSAN (03107260507)
   📢 Channel: https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46
-  ✨ 100% Pure Standard Image Menu (No Buttons, Zero Waiting Bugs)
+  ✨ 100% Pure English Translated Menu (Zero Arabic, Zero Waiting Bugs)
 ═══════════════════════════════════════════════════════════════
 */
 
@@ -19,7 +19,7 @@ const categoryNames = {
   'economy':      'Economy & Banking',
   'game':         'Interactive Games',
   'group':        'Group Administration',
-  'grupo':        'Group Tools',
+  'grupo':        'Group Utilities',
   'info':         'Information & Status',
   'internet':     'Web & Search',
   'sticker':      'Stickers Studio',
@@ -32,6 +32,10 @@ const categoryNames = {
   'herramientas': 'Utility Services',
   'nable':        'Switch & Toggles',
   'islam':        'Islamic Features',
+  'قسم الأدوات🛠️': 'Extended Tools',
+  'ترفيه':        'Fun & Entertainment',
+  'مجموعة':       'Group Social & Chat',
+  'utils':        'Utilities & Helpers'
 }
 
 const tagIcons = {
@@ -55,6 +59,192 @@ const tagIcons = {
   'herramientas': '🔧',
   'nable':        '🔌',
   'islam':        '🕌',
+  'قسم الأدوات🛠️': '🛠️',
+  'ترفيه':        '🎭',
+  'مجموعة':       '👥',
+  'utils':        '⚙️'
+}
+
+const commandTranslations = {
+  // AI
+  'انطق': 'tts <text>',
+  'فيديو-ذكاء <وصف>': 'ai-video <prompt>',
+  // Tools
+  'وصف <رد على صورة>': 'describe <reply to img>',
+  'rgb <النص>': 'rgb <text>',
+  'ازالة': 'removebg',
+  'ايموجي <ايموجي>': 'emoji <emoji>',
+  'فضح': 'antidelete / reveal',
+  'لصورة': 'toimg',
+  'إبلاغ': 'report <issue>',
+  'اقتراح': 'suggest <feature>',
+  'ترجم <النص>': 'translate <text>',
+  'تنفيذ_الترجمة': 'run_translation',
+  'اسكرين <رابط>': 'ssweb <url>',
+  'لفويس': 'tovn',
+  'صوت-لنص': 'transcribe',
+  // Downloads
+  'تيك <رابط>': 'tiktok <url>',
+  'سبوتيفاي <بحث>': 'spotify <query>',
+  'spdl <رابط>': 'spdl <url>',
+  'يوتيوب <رابط>': 'youtube <url>',
+  'play2': 'play2 <song>',
+  'فيلم': 'movie <name>',
+  'انستا <رابط>': 'instagram <url>',
+  'بنترست <بحث>': 'pinterest <query>',
+  'صور <بحث>': 'images <query>',
+  'فيد <رابط الفيديو><اسم الفيديو>': 'video <url>',
+  'ايديت': 'capcut_edit',
+  'شغل <اسم الأغنية>': 'play <song name>',
+  'play <اسم الأغنية>': 'play <song name>',
+  'ytmp340 <رابط>': 'ytmp3 <url>',
+  'ytmp440 <رابط>': 'ytmp4 <url>',
+  'ytmpp3doc <رابط>': 'ytmp3doc <url>',
+  'ytmpp4doc <رابط>': 'ytmp4doc <url>',
+  // Group Admin
+  'كلوز': 'close',
+  'ضيف-ميتا': 'addmeta',
+  'بانشات': 'banchat',
+  'حظر_البوت': 'banchat',
+  'بانشاتفك': 'unbanchat',
+  'desbanearbot': 'unbanchat',
+  'الغاء_انذار': 'unwarn',
+  'إلغاء_إنذار': 'unwarn',
+  'تحذير': 'warn',
+  'انذار': 'warn',
+  'قفل-شات': 'lockchat',
+  'فتح-شات': 'openchat',
+  'قبول الكل': 'acceptall',
+  'قبول <عدد>': 'accept <count>',
+  'خفض': 'demote <@tag>',
+  'رفع': 'promote <@tag>',
+  'كتم': 'mute <@tag>',
+  'رفع_كتم': 'unmute <@tag>',
+  'المكتومين': 'mutedlist',
+  'طرد': 'kick <@tag>',
+  'لينك': 'grouplink',
+  'غير': 'revoke',
+  'مخفي': 'hidetag / tagall',
+  // Economy
+  'اسبوعي': 'weekly',
+  'الاغنياء': 'leaderboard',
+  'اقتصادي': 'economy',
+  'ايداع': 'deposit <amount>',
+  'بنك': 'bank',
+  'تحويل': 'transfer <@tag> <amount>',
+  'تنقيب': 'mine',
+  'جريمه': 'crime',
+  'رهان': 'bet <amount>',
+  'رهان2': 'bet2 <amount>',
+  'روليت': 'roulette',
+  'سحب': 'withdraw <amount>',
+  'اسرق @tag': 'rob <@tag>',
+  'سنوي': 'yearly',
+  'شهري': 'monthly',
+  'صندوق': 'inventory',
+  'صيد-بري': 'safari',
+  'صيد': 'fish',
+  'عالج': 'heal',
+  'عمل2': 'work2',
+  'عمل': 'work',
+  'كازينو': 'casino',
+  'مغامره': 'adventure',
+  'ملك-كتابة': 'coinflip',
+  'متجر': 'shop',
+  'شراء': 'buy <item>',
+  'يومي': 'daily',
+  // Owner
+  'حزمة-تيلي <رابط>': 'tgsticker <url>',
+  'بان <@tag>': 'banuser <@tag>',
+  '$ <الأمر>': 'exec <code>',
+  'المتبندين': 'bannedlist',
+  'ريستارت': 'restart',
+  'بانفك <@tag>': 'unbanuser <@tag>',
+  'ابحث <كلمة>': 'searchcode <word>',
+  'ارفعني': 'setadmin',
+  'افحصهم': 'checkusers',
+  'اوامرهم': 'usercommands',
+  'اوت': 'leavegroup',
+  'باتش <اسم الأمر>': 'patch <cmd>',
+  'بدلو الكلمة القديمة | الجديدة': 'replace <old>|<new>',
+  'بدلو2 الكلمة القديمة | الكلمة الجديدة': 'replace2 <old>|<new>',
+  'نفذ_التبديل اسم_الملف.js': 'applyreplace <file>',
+  'خش <لينك>': 'join <link>',
+  'ضيف': 'addcmd',
+  'امسح': 'delcmd',
+  'بلوقن لست': 'plugin list',
+  'بلوقن عرض': 'plugin view',
+  'بلوقن اضف': 'plugin add',
+  'بلوقن حذف': 'plugin del',
+  'جيب': 'getplugin',
+  'سكرب': 'script',
+  // Switches
+  'التفعيلات': 'toggles / switches',
+  // Anime
+  'وايفو': 'waifu',
+  'انمي': 'anime',
+  // Games
+  'احزر': 'guess',
+  // Main
+  'إنجازاتي': 'achievements',
+  'انجازاتي': 'achievements',
+  'البوت': 'botstatus',
+  'بروفايل': 'profile',
+  'تصنيف': 'ranking',
+  'ترتيب': 'top',
+  'المالكين': 'owners',
+  // Stickers
+  'لملصق': 'sticker',
+  'براتفيد': 'bratvideo',
+  'حقوق <نص>': 'take / wm <pack|author>',
+  'لفيد': 'tovideo',
+  'مسج': 'fakemsg',
+  // Bot control
+  'ذاتي': 'selfmode',
+  'عام': 'publicmode',
+  'مضاد-خاص': 'antiprivate',
+  'قروبات': 'grouponly',
+  'ادخل': 'join <link>',
+  'salir': 'leave',
+  'اطلع': 'leave',
+  'تسجيل-خروج': 'logout',
+  'اعادة-تشغيل': 'reload',
+  // Fun
+  'خجل @منشن': 'blush @tag',
+  'عض < رد': 'bite <reply>',
+  'غضب @منشن': 'angry @tag',
+  'غضب': 'angry',
+  'قهوة @منشن': 'coffee @tag',
+  'ملل @منشن': 'bored @tag',
+  'صباح': 'goodmorning',
+  'ليلة': 'goodnight',
+  // Novel / Web
+  'رواية <اسم> - البحث عن رواية': 'novel search <name>',
+  'رواية-اختيار <رقم> - اختيار رواية من النتائج': 'novel select <num>',
+  'رواية-صفحة <رقم> - عرض فصول صفحة معينة': 'novel page <num>',
+  'رواية-فصل <رقم> - تحميل فصل معين': 'novel chapter <num>',
+  'رواية-الصفحات - عرض صفحات الفصول': 'novel pages',
+  'رواية-تحديث - تحديث قائمة الفصول': 'novel update',
+  'شازام': 'shazam',
+  'ترانست': 'translate'
+}
+
+function translateCommand(rawCmd) {
+  const trimmed = String(rawCmd || '').trim()
+  if (commandTranslations[trimmed]) return commandTranslations[trimmed]
+
+  let translated = trimmed
+    .replace(/<رابط>/g, '<url>')
+    .replace(/<النص>/g, '<text>')
+    .replace(/<نص>/g, '<text>')
+    .replace(/<بحث>/g, '<query>')
+    .replace(/<اسم>/g, '<name>')
+    .replace(/<رقم>/g, '<num>')
+    .replace(/<وصف>/g, '<prompt>')
+    .replace(/@منشن/g, '@tag')
+    .replace(/<رد على صورة>/g, '<reply to img>')
+
+  return commandTranslations[translated] || translated
 }
 
 function getLocalThumbnail() {
@@ -74,10 +264,20 @@ function getLocalThumbnail() {
 }
 
 function getCommandsByTag(tag, usedPrefix = '.') {
-  return Object.values(global.plugins || {})
+  const rawList = Object.values(global.plugins || {})
     .filter(p => !p.disabled && p.tags && (Array.isArray(p.tags) ? p.tags : [p.tags]).includes(tag))
     .flatMap(p => (Array.isArray(p.help) ? p.help : [p.help]).filter(Boolean))
-    .map(cmd => `  ${tagIcons[tag] || '◦'} *${usedPrefix}${cmd}*`)
+
+  const seen = new Set()
+  const translated = []
+  for (const cmd of rawList) {
+    const en = translateCommand(cmd)
+    if (!seen.has(en)) {
+      seen.add(en)
+      translated.push(`  ${tagIcons[tag] || '◦'} *${usedPrefix}${en}*`)
+    }
+  }
+  return translated
 }
 
 function decorateCategoryHeader(catName, cmdCount) {
@@ -158,12 +358,11 @@ ${line}
     for (let tag in menu) {
       const icon = tagIcons[tag] || '◦'
       const label = categoryNames[tag] || tag.toUpperCase()
+      const cmds = getCommandsByTag(tag, usedPrefix)
+      if (cmds.length === 0) continue
+
       txt += `\n◆ *${icon} ${label}*\n`
-      let commands = menu[tag].map(plugin => {
-        const cmdList = Array.isArray(plugin.help) ? plugin.help : [plugin.help]
-        return cmdList.map(cmd => `  ${icon} ${usedPrefix}${cmd}`).join('\n')
-      }).join('\n')
-      txt += `${commands}\n`
+      txt += `${cmds.join('\n')}\n`
     }
 
     txt += `
