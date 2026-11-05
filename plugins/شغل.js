@@ -1,4 +1,4 @@
-﻿/*
+/*
 ⚡ MASTER MD ⚡
 AHSAN (03107260507)
 
@@ -14,9 +14,15 @@ https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46
 
 import fetch from 'node-fetch'
 import yts from 'yt-search'
-import Jimp from 'jimp'
 import axios from 'axios'
 import { delay } from '@whiskeysockets/baileys'
+import { createRequire } from 'module'
+const _require = createRequire(import.meta.url)
+let Jimp
+try {
+    const _j = _require('jimp')
+    Jimp = _j.Jimp || _j.default || _j
+} catch (e) {}
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024
 const AUDIO_DOC_THRESHOLD = 30 * 1024 * 1024

@@ -6,7 +6,9 @@
 ═══════════════════════════════════════════════════════════════
 */
 
-import TelegramBot from 'node-telegram-bot-api'
+import { createRequire } from 'module'
+const _require = createRequire(import.meta.url)
+const TelegramBot = _require('node-telegram-bot-api')
 import axios from 'axios'
 
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.TG_TOKEN || global.tgToken || '9104594619:AAHaspLTBfwlKCTSU1xsmCPi0GZ-bFAP2M8'
