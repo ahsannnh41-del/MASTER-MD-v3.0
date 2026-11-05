@@ -251,20 +251,14 @@ syncFullHistory: false,
 shouldSyncHistoryMessage: () => false,
 
 getMessage: async (key) => {
-
-try {
-
-let jid = jidNormalizedUser(key.remoteJid);
-
-let msg = await store.loadMessage(jid, key.id)
-
-return msg?.message || ""
-
-} catch (error) {
-
-return ""
-
-}},
+    try {
+        let jid = jidNormalizedUser(key.remoteJid);
+        let msg = await store.loadMessage(jid, key.id)
+        return msg?.message || proto?.Message?.fromObject({}) || ""
+    } catch (error) {
+        return proto?.Message?.fromObject({}) || ""
+    }
+},
 
 msgRetryCounterCache: msgRetryCounterCache || new Map(),
 
@@ -283,6 +277,7 @@ maxIdleTimeMs: 60000,
 }
 
 global.conn = makeWASocket(connectionOptions)
+store.bind(global.conn)
 
 // Capture QR code on initial connection
 global.conn.ev.on('connection.update', async (update) => {
@@ -780,6 +775,7 @@ global.reloadHandler = async function(restatConn) {
         }
 
         global.conn = makeWASocket(connectionOptions, { chats: oldChats })
+        store.bind(global.conn)
         isInit = true
     }
 
