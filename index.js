@@ -58,7 +58,7 @@ const { PhoneNumberUtil } = pkg
 
 const phoneUtil = PhoneNumberUtil.getInstance()
 
-const { DisconnectReason, useMultiFileAuthState, MessageRetryMap, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, jidNormalizedUser } = await import('@whiskeysockets/baileys')
+const { DisconnectReason, useMultiFileAuthState, MessageRetryMap, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, jidNormalizedUser, Browsers } = await import('@whiskeysockets/baileys')
 
 import readline, { createInterface } from 'readline'
 
@@ -222,7 +222,7 @@ printQRInTerminal: opcion == '1' ? true : methodCodeQR ? true : false,
 
 mobile: MethodMobile, 
 
-browser: ["MacOs", "Safari"],
+browser: Browsers ? Browsers.ubuntu('Chrome') : ['Ubuntu', 'Chrome', '20.0.04'],
 
 auth: {
 
@@ -300,7 +300,7 @@ addNumber = phoneNumber.replace(/\D/g, '')
 if (addNumber) {
 setTimeout(async () => {
 try {
-let codeBot = await conn.requestPairingCode(addNumber, "MASTERMD")
+let codeBot = await conn.requestPairingCode(addNumber)
 codeBot = codeBot?.match(/.{1,4}/g)?.join("-") || codeBot
 console.log(chalk.bold.white(chalk.bgMagenta(`[ ⚡ ] Pairing Code:`)), chalk.bold.white(chalk.white(codeBot)))
 } catch (pairErr) {

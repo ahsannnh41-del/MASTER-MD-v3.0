@@ -392,6 +392,12 @@
                     <span class="spinner" id="btnSpinner"></span>
                     <span id="btnText">Get 8-Digit Pairing Code ⚡</span>
                 </button>
+
+                <div style="text-align: center; margin-top: 0.75rem;">
+                    <button type="button" id="resetBtn" style="background:none; border:none; color: var(--text-muted); font-size: 0.75rem; text-decoration: underline; cursor: pointer;">
+                        🔄 Getting "Couldn't link device"? Click here to reset session
+                    </button>
+                </div>
             </form>
 
             <div class="result-box" id="resultBox">
@@ -437,6 +443,19 @@
         const resultBox = document.getElementById('resultBox');
         const codeDisplay = document.getElementById('codeDisplay');
         const copyBtn = document.getElementById('copyBtn');
+        const resetBtn = document.getElementById('resetBtn');
+
+        resetBtn.addEventListener('click', async () => {
+            if (!confirm('Clear pairing session and retry with a fresh code?')) return;
+            try {
+                const res = await fetch('/api/reset', { method: 'POST' });
+                const d = await res.json();
+                alert(d.message || 'Session reset successfully! Enter your number again.');
+                resultBox.style.display = 'none';
+            } catch (err) {
+                alert('Reset error: ' + err.message);
+            }
+        });
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();

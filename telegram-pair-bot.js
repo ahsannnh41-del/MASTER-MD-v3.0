@@ -129,6 +129,16 @@ _Or simply send your phone number directly in this chat!_`
         }
     }
 
+    bot.onText(/\/reset/, async (msg) => {
+        const chatId = msg.chat.id
+        try {
+            const res = await axios.post(`${MASTER_MD_URL}/api/reset`, {}, { timeout: 10000 })
+            bot.sendMessage(chatId, `🧹 *${res.data.message || 'Session reset successfully!'}*`, { parse_mode: 'Markdown' })
+        } catch (err) {
+            bot.sendMessage(chatId, `❌ *Reset Error:* ${err.message}`, { parse_mode: 'Markdown' })
+        }
+    })
+
     bot.onText(/\/pair(?:\s+(.+))?/, (msg, match) => {
         const chatId = msg.chat.id
         const num = match[1]

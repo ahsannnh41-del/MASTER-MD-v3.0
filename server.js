@@ -103,7 +103,7 @@ app.post('/api/pair', async (req, res) => {
         for (let attempt = 1; attempt <= 3; attempt++) {
             try {
                 if (typeof global.conn.requestPairingCode === 'function') {
-                    rawCode = await global.conn.requestPairingCode(cleanNumber, "MASTERMD")
+                    rawCode = await global.conn.requestPairingCode(cleanNumber)
                     if (rawCode) break
                 }
             } catch (err) {
@@ -136,6 +136,20 @@ app.post('/api/pair', async (req, res) => {
             success: false,
             message: 'Server error: ' + e.message
         })
+    }
+})
+
+// Reset un-registered session to allow fresh pairing code handshake
+app.post('/api/reset', async (req, res) => {
+    try {
+        const sessionPath = path.join(__dirname, global.sessions || 'Sessions/Principal')
+        if (fs.existsSync(sessionPath) && !global.conn?.authState?.creds?.registered) {
+            fs.rmSync(sessionPath, { recursive: true, force: true })
+            console.log('🧹 [Session Reset] Cleared un-registered session files.')
+        }
+        return res.json({ success: true, message: 'Session reset successfully! You can now request a fresh pairing code.' })
+    } catch (e) {
+        return res.status(500).json({ success: false, message: e.message })
     }
 })
 
