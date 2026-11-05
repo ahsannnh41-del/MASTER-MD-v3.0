@@ -84,6 +84,9 @@
     "moment-timezone": "^0.5.37",
     "wa-sticker-formatter": "^4.3.2"
   },
+  "overrides": {
+    "jimp": "^0.16.13"
+  },
   "engines": {
     "node": ">=20.0.0"
   },
