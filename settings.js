@@ -3,7 +3,7 @@ import chalk from "chalk"
 import { fileURLToPath } from "url"
 import fs from "fs"
 
-global.botNumber = "923107260507" 
+global.botNumber = process.env.BOT_NUMBER || "" 
 
 global.owner = [
     ["923107260507", "👑 AHSAN", true, "923107260507@s.whatsapp.net"],

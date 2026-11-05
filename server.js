@@ -83,43 +83,35 @@ app.post('/api/pair', async (req, res) => {
             })
         }
 
-        if (!global.conn) {
-            return res.status(503).json({
-                success: false,
-                message: 'Bot socket is currently initializing. Please retry in 5 seconds.'
-            })
+        // Wait up to 5 seconds if bot engine is still loading
+        for (let wait = 0; wait < 10; wait++) {
+            if (typeof global.requestPairingCode === 'function' || global.conn) break
+            await new Promise(r => setTimeout(r, 500))
         }
 
-        if (global.conn.authState?.creds?.registered) {
+        if (global.conn?.authState?.creds?.registered) {
             return res.json({
                 success: false,
                 message: 'MASTER MD is already linked and connected to WhatsApp! If you wish to re-pair, please logout first.'
             })
         }
 
-        console.log(`[Web Pairing] Generating code for: +${cleanNumber}`)
+        console.log(`[Web Pairing] Initiating clean pairing flow for: +${cleanNumber}`)
 
-        let rawCode = null
-        for (let attempt = 1; attempt <= 3; attempt++) {
-            try {
-                if (typeof global.conn.requestPairingCode === 'function') {
-                    rawCode = await global.conn.requestPairingCode(cleanNumber)
-                    if (rawCode) break
-                }
-            } catch (err) {
-                console.warn(`[Web Pairing] Attempt ${attempt} note:`, err.message)
-                await new Promise(r => setTimeout(r, 1500))
-            }
+        let formattedCode = null
+        if (typeof global.requestPairingCode === 'function') {
+            formattedCode = await global.requestPairingCode(cleanNumber)
+        } else if (global.conn && typeof global.conn.requestPairingCode === 'function') {
+            const rawCode = await global.conn.requestPairingCode(cleanNumber)
+            formattedCode = rawCode?.match(/.{1,4}/g)?.join("-") || rawCode
         }
 
-        if (!rawCode) {
+        if (!formattedCode) {
             return res.status(500).json({
                 success: false,
                 message: 'Could not generate pairing code. Please ensure your number is registered on WhatsApp and try again.'
             })
         }
-
-        const formattedCode = rawCode?.match(/.{1,4}/g)?.join("-") || rawCode
 
         console.log(`✅ [Web Pairing Ready] Code for +${cleanNumber}: ${formattedCode}`)
 
@@ -127,14 +119,14 @@ app.post('/api/pair', async (req, res) => {
             success: true,
             code: formattedCode,
             phoneNumber: cleanNumber,
-            message: 'Pairing code generated successfully!'
+            message: 'Pairing code generated successfully! Enter it on your phone within 60 seconds.'
         })
 
     } catch (e) {
         console.error('[Web Pairing Error]:', e)
         return res.status(500).json({
             success: false,
-            message: 'Server error: ' + e.message
+            message: e.message || 'Server error occurred during pairing.'
         })
     }
 })
@@ -142,10 +134,14 @@ app.post('/api/pair', async (req, res) => {
 // Reset un-registered session to allow fresh pairing code handshake
 app.post('/api/reset', async (req, res) => {
     try {
-        const sessionPath = path.join(__dirname, global.sessions || 'Sessions/Principal')
-        if (fs.existsSync(sessionPath) && !global.conn?.authState?.creds?.registered) {
-            fs.rmSync(sessionPath, { recursive: true, force: true })
-            console.log('🧹 [Session Reset] Cleared un-registered session files.')
+        if (typeof global.resetSession === 'function') {
+            await global.resetSession()
+        } else {
+            const sessionPath = path.join(__dirname, global.sessions || 'Sessions/Principal')
+            if (fs.existsSync(sessionPath) && !global.conn?.authState?.creds?.registered) {
+                fs.rmSync(sessionPath, { recursive: true, force: true })
+                console.log('🧹 [Session Reset] Cleared un-registered session files.')
+            }
         }
         return res.json({ success: true, message: 'Session reset successfully! You can now request a fresh pairing code.' })
     } catch (e) {

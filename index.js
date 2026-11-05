@@ -50,7 +50,8 @@ import { mongoDB, mongoDBV2 } from './lib/mongoDB.js'
 
 import store from './lib/store.js'
 
-const { proto } = (await import('@whiskeysockets/baileys')).default
+const _baileysIndex = await import('@whiskeysockets/baileys')
+const proto = _baileysIndex.proto || _baileysIndex.default?.proto
 
 import pkg from 'google-libphonenumber'
 
@@ -172,7 +173,14 @@ const msgRetryCounterCache = new NodeCache({ stdTTL: 0, checkperiod: 0 })
 
 const userDevicesCache = new NodeCache({ stdTTL: 0, checkperiod: 0 })
 
-const { version } = await fetchLatestBaileysVersion()
+let version = [2, 3000, 1037641644]
+try {
+    const fetched = await fetchLatestBaileysVersion()
+    if (fetched?.version) version = fetched.version
+} catch (e) {
+    console.warn('[ MASTER MD ] Baileys version fetch warning, using stable fallback:', version.join('.'))
+}
+global.waVersion = version
 
 let phoneNumber = global.botNumber
 
@@ -228,7 +236,7 @@ auth: {
 
 creds: state.creds,
 
-keys: makeCacheableSignalKeyStore(state.keys, Pino({ level: "fatal" }).child({ level: "fatal" })),
+keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
 
 },
 
@@ -237,6 +245,8 @@ markOnlineOnConnect: false,
 generateHighQualityLinkPreview: true, 
 
 syncFullHistory: false,
+
+shouldSyncHistoryMessage: () => false,
 
 getMessage: async (key) => {
 
@@ -260,7 +270,7 @@ userDevicesCache: userDevicesCache || new Map(),
 
 defaultQueryTimeoutMs: undefined,
 
-cachedGroupMetadata: (jid) => globalThis.conn.chats[jid] ?? {},
+cachedGroupMetadata: (jid) => globalThis.conn?.chats?.[jid] ?? {},
 
 version: version, 
 
@@ -271,6 +281,142 @@ maxIdleTimeMs: 60000,
 }
 
 global.conn = makeWASocket(connectionOptions)
+
+// Universal Robust Pairing Code Generator for Web, Telegram, and CLI
+global.requestPairingCode = async function(rawNumber) {
+    const cleanNumber = String(rawNumber || '').replace(/[^0-9]/g, '')
+    if (!cleanNumber || cleanNumber.length < 10 || cleanNumber.length > 15) {
+        throw new Error('Invalid phone number! Please enter 10 to 15 digits including country code (e.g. 923107260507).')
+    }
+
+    if (global.conn?.authState?.creds?.registered) {
+        throw new Error('MASTER MD is already linked and connected to WhatsApp!')
+    }
+
+    console.log(chalk.cyan(`\n⚡ [ MASTER MD Pairing ] Generating fresh pairing handshake for: +${cleanNumber}...`))
+
+    // 1. Close existing socket if alive and not registered
+    if (global.conn) {
+        try {
+            global.conn.ev.removeAllListeners()
+            global.conn.ws?.close()
+        } catch (e) {}
+    }
+
+    // 2. Clean up un-registered session files to ensure pristine key exchange
+    const sessionDir = path.join(__dirname, global.sessions || 'Sessions/Principal')
+    if (fs.existsSync(sessionDir)) {
+        try {
+            fs.rmSync(sessionDir, { recursive: true, force: true })
+            console.log(chalk.yellow('[ MASTER MD Pairing ] Cleaned previous un-registered session state.'))
+        } catch (e) {}
+    }
+
+    // 3. Initialize fresh multi-file auth state
+    const { state: freshState, saveCreds: freshSaveCreds } = await useMultiFileAuthState(global.sessions || 'Sessions/Principal')
+
+    // 4. Create fresh Baileys socket with pristine signal keys
+    const pairOptions = {
+        logger: pino({ level: 'silent' }),
+        printQRInTerminal: false,
+        mobile: false,
+        browser: Browsers ? Browsers.ubuntu('Chrome') : ['Ubuntu', 'Chrome', '20.0.04'],
+        auth: {
+            creds: freshState.creds,
+            keys: makeCacheableSignalKeyStore(freshState.keys, pino({ level: 'silent' }))
+        },
+        markOnlineOnConnect: false,
+        generateHighQualityLinkPreview: true,
+        syncFullHistory: false,
+        shouldSyncHistoryMessage: () => false,
+        version: global.waVersion || [2, 3000, 1037641644],
+        keepAliveIntervalMs: 30000,
+        maxIdleTimeMs: 60000,
+    }
+
+    const sock = makeWASocket(pairOptions)
+    global.conn = sock
+
+    // 5. Save credentials immediately on phone confirmation
+    sock.ev.on('creds.update', async () => {
+        try {
+            await freshSaveCreds()
+        } catch (err) {
+            console.error('[ MASTER MD creds.update ]', err.message)
+        }
+    })
+
+    // 6. Monitor connection opening
+    sock.ev.on('connection.update', async (update) => {
+        const { connection } = update
+        if (connection === 'open') {
+            console.log(chalk.bold.greenBright(`\n🎉 [ MASTER MD ] WhatsApp Linked Successfully with: +${cleanNumber}!`))
+            try {
+                const targetJid = jidNormalizedUser(sock.user?.id || `${cleanNumber}@s.whatsapp.net`)
+                await sock.sendMessage(targetJid, {
+                    text: `╔══════════════════════════════════╗\n` +
+                          `║   ⚡ MASTER MD CONNECTED! ⚡     ║\n` +
+                          `║       DEVELOPER: AHSAN           ║\n` +
+                          `╚══════════════════════════════════╝\n\n` +
+                          `Assalam-o-Alaikum! Your WhatsApp is now successfully linked with *MASTER MD*.\n\n` +
+                          `🤖 *Bot Name:* MASTER MD v3.0.0\n` +
+                          `👑 *Developer:* AHSAN (03107260507)\n` +
+                          `⚡ *Status:* 🟢 Active & Online\n` +
+                          `📢 *Channel:* https://whatsapp.com/channel/0029VbB45OnAInPcfOvoYm46\n\n` +
+                          `Type *.menu* to view interactive buttons menu.\n` +
+                          `> © 2026 MASTER MD • All Rights Reserved to AHSAN`
+                })
+            } catch (e) {}
+
+            if (typeof global.reloadHandler === 'function') {
+                await global.reloadHandler(false).catch(console.error)
+            }
+        }
+    })
+
+    // 7. Allow 3.5 seconds for WebSocket Noise encryption & transport readiness
+    await new Promise(resolve => setTimeout(resolve, 3500))
+
+    // 8. Request 8-digit pairing code from WhatsApp server
+    let rawCode = null
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            rawCode = await sock.requestPairingCode(cleanNumber)
+            if (rawCode) break
+        } catch (err) {
+            console.warn(`[ Pairing Request Attempt ${attempt} ]`, err.message)
+            await new Promise(r => setTimeout(r, 2000))
+        }
+    }
+
+    if (!rawCode) {
+        throw new Error('Could not generate pairing code. Please ensure the phone number is active on WhatsApp and retry.')
+    }
+
+    const formatted = rawCode.match(/.{1,4}/g)?.join('-') || rawCode
+    console.log(chalk.bold.white(chalk.bgMagenta(`[ ⚡ ] Pairing Code:`)), chalk.bold.white(chalk.white(formatted)))
+    return formatted
+}
+
+global.resetSession = async function() {
+    if (global.conn?.authState?.creds?.registered) {
+        throw new Error('Cannot reset an active registered session. Please logout from WhatsApp on your phone first.')
+    }
+    if (global.conn) {
+        try {
+            global.conn.ev.removeAllListeners()
+            global.conn.ws?.close()
+        } catch (e) {}
+    }
+    const sessionDir = path.join(__dirname, global.sessions || 'Sessions/Principal')
+    if (fs.existsSync(sessionDir)) {
+        try {
+            fs.rmSync(sessionDir, { recursive: true, force: true })
+        } catch (e) {}
+    }
+    console.log(chalk.yellow('[ MASTER MD ] Unregistered session state cleared.'))
+    return true
+}
 
 if (!fs.existsSync(`./${sessions}/creds.json`)) {
 
@@ -300,13 +446,11 @@ addNumber = phoneNumber.replace(/\D/g, '')
 if (addNumber) {
 setTimeout(async () => {
 try {
-let codeBot = await conn.requestPairingCode(addNumber)
-codeBot = codeBot?.match(/.{1,4}/g)?.join("-") || codeBot
-console.log(chalk.bold.white(chalk.bgMagenta(`[ ⚡ ] Pairing Code:`)), chalk.bold.white(chalk.white(codeBot)))
+await global.requestPairingCode(addNumber)
 } catch (pairErr) {
 console.error(chalk.red('[ Pairing Error ]'), pairErr.message)
 }
-}, 3000)
+}, 1000)
 }}}}
 
 conn.isInit = false
@@ -597,11 +741,11 @@ if (connection === "open") {
 
 const userJid = jidNormalizedUser(conn.user.id)
 
-const userName = conn.user.name || conn.user.verifiedName || "Desconocido"
+const userName = conn.user.name || conn.user.verifiedName || "MASTER MD User"
 
 await joinChannels(conn)
 
-console.log(chalk.green.bold(`[ ✿ ]  Conectado a: ${userName}`))
+console.log(chalk.green.bold(`\n⚡ [ MASTER MD ] Connected successfully as: ${userName} (${userJid})`))
 
 }
 
@@ -611,45 +755,45 @@ if (connection === 'close') {
 
 if (reason === DisconnectReason.badSession) {
 
-console.log(chalk.bold.cyanBright(`\n⚠︎ No connection found. Delete the bot's main session, then try again..`))
+console.log(chalk.bold.cyanBright(`\n⚠︎ [ MASTER MD ] Bad session. Delete the bot's session folder, then pair again.`))
 
 } else if (reason === DisconnectReason.connectionClosed) {
 
-console.log(chalk.bold.magentaBright(`\n♻ Reconnecting to the bot...`))
+console.log(chalk.bold.magentaBright(`\n♻ [ MASTER MD ] Reconnecting to WhatsApp server...`))
 
 await global.reloadHandler(true).catch(console.error)
 
 } else if (reason === DisconnectReason.connectionLost) {
 
-console.log(chalk.bold.blueBright(`\n⚠︎ Connection to the server has been lost; reconnecting to the bot is underway....`))
+console.log(chalk.bold.blueBright(`\n⚠︎ [ MASTER MD ] Connection lost; reconnecting to WhatsApp...`))
 
 await global.reloadHandler(true).catch(console.error)
 
 } else if (reason === DisconnectReason.connectionReplaced) {
 
-console.log(chalk.bold.yellowBright(`\nꕥ La conexión del Bot ha sido reemplazada.`))
+console.log(chalk.bold.yellowBright(`\nꕥ [ MASTER MD ] Connection replaced by another session.`))
 
 } else if (reason === DisconnectReason.loggedOut) {
 
-console.log(chalk.bold.redBright(`\n⚠︎ Sin conexión, borra la session principal del Bot, y conectate nuevamente.`))
+console.log(chalk.bold.redBright(`\n⚠︎ [ MASTER MD ] Logged out from WhatsApp. Clear session and pair again.`))
 
 await global.reloadHandler(true).catch(console.error)
 
 } else if (reason === DisconnectReason.restartRequired) {
 
-console.log(chalk.bold.cyanBright(`\n♻ Conectando el Bot con el servidor...`))
+console.log(chalk.bold.cyanBright(`\n♻ [ MASTER MD ] Server requested restart, reconnecting...`))
 
 await global.reloadHandler(true).catch(console.error)
 
 } else if (reason === DisconnectReason.timedOut) {
 
-console.log(chalk.bold.yellowBright(`\n♻ Conexión agotada, reconectando el Bot...`))
+console.log(chalk.bold.yellowBright(`\n♻ [ MASTER MD ] Connection timed out, reconnecting...`))
 
 await global.reloadHandler(true).catch(console.error)
 
 } else {
 
-console.log(chalk.bold.redBright(`\n⚠︎ Connection closed, please connect again..`))
+console.log(chalk.bold.redBright(`\n⚠︎ [ MASTER MD ] Connection closed, reconnecting...`))
 
 }}}
 
